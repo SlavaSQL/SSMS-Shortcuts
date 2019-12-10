@@ -1,0 +1,14 @@
+
+1. Key assignments are "Historical" and you can rearrange it for your own preferences.
+2. Proposed solution hasn't been tested in all possible environments. If a particular scripts does not work in your environment – change it to fit! (or ask me for help)
+3. When object names are not unique in a database, the result set will be returned only for the first instance. (Applicable for Statistics)
+
+
+Big thanks for all known and unknown contributors of queries I've used in that solution.
+Here are some names of known heroes:
+- Paul Randall (http://www.sqlskills.com/blogs/paul/wait-statistics-or-please-tell-me-where-it-hurts/)
+- Glen Berry (https://sqlserverperformance.wordpress.com/2010/10/08/sql-server-memory-related-queries/)
+- Nikola Dimitrijevic(https://www.sqlshack.com/all-about-latches-in-sql-server/)
+- Benjamin Nevarez(http://sqlblog.com/blogs/ben_nevarez/archive/2009/07/26/getting-cpu-utilization-data-from-sql-server.aspx)
+
+

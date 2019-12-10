@@ -1,0 +1,144 @@
+Functionality:
+Ctrl+F1 - 
+Procedure "Ctrl-F1" returns following, depending on parameters:
+1. No parameters: List of all user tables in current databases sorted by size and number of records.
+	It is normal that tables with less records are bigger in size.
+2. "Name of a table": "LIMITED" statistics and Compression suggestion for all indexes and partitions on that table.
+	For large tables that operation can run for several minutes.
+3. "Name of an index": "LIMITED" statistics for that index along with list of Page allocation.
+4. "Name of a table or an index" + reporting mode: SAMPLED or DETAILED.
+   Example 1: tbl_MyTable 
+   Example 2: 'CLUIX_MyTable','DETAILED' 
+5. Single Letter Paremeters:
+   "C" - Compression suggestions for 25 biggest tables.
+----------------------------------------------------------------------------------------------
+-- Ctrl+1
+----------------------------------------------------------------------------------------------
+-- Ctrl+2
+----------------------------------------------------------------------------------------------
+-- Ctrl+3 - Locks
+Procedure "Ctrl-3" returns following, depending on parameters:
+1. No parameters: List of all current Locks. Similar to sp_lock with some extentions.
+2. "Database ID": List of all current Locks for the specified Database.
+3. "Session ID": List of all current Locks for the specified session.
+ That is possible that "Session ID" and "Database ID" cross each other and wxtra results are returned.
+4. "Database Name": List of all current Locks for the specified Database.
+5. "Table Name": List of all current Locks on that table.
+	Have to be a table in the current database or with fully qualified name.
+6. "Object Id": List of all current Locks on that object.
+7. "TAB", "PAG", "DB": List of all current Locks for specified type of an object.
+8. "X", "U", etc. : List of all current Locks with specified mode.
+9. "IP" or "Host Name" or "Login Name" or "Application Name": List of all current Locks for specified source.
+ That option might match table or database name.
+Example 1: tbl_MyTable 
+Example 2: TAB 
+Example 3: Sch-M 
+Example 4: 123456789 
+----------------------------------------------------------------------------------------------
+-- Ctrl+4 (DB files)
+Function Ctrl-4: SQL Server Index Troubleshooting.
+1. No options: Returns Lists of TOP 10 Not-Used Indexes and TOP 10 Missing Indexes.
+   Disclosure A: Both lists are valid only after full regular business workload cycle. Without SQL Server Reboots and Index Maintenance.
+   Disclosure B: Before applying Missing Indexes, always check if any similar index exist. Maybe you can just simply modify an existing one.
+2. Index Name: Returns Index Statistics and general info.
+3. Index Name: Returns Index Usage Statistics and general info.
+----------------------------------------------------------------------------------------------
+-- Ctrl+5 (Database Details)
+1. No options Returns List of all Databases with following info: 
+	- Databases: ID, Name, State, User Access, Recovery Model, Compatibility Level, Collation, etc.
+	- Files: ID, Name, Type, State, Physical Name, Size (Mb), Used Space (Mb), Free Space (%),
+	  Auto Growth, Average Read/Write waits (Ms), CPU Usage by DB, Number of VLFs per Log File;
+	Additional DataSet with: 
+	- List of Volumes used by SQL Server data and log files;
+	- Average Read/Write waits (Ms) per Volume;
+	- Total space per Volume;
+	- Free space with percentage per Volume;
+	If Availability Group is present returns general information about the group
+	and participating SQL Server Instances;
+2. Database Name or ID Returns:
+	- Only one DB will be shown;
+	- List of Partition Schemas with Partitions and ranges;
+	- List of all DB Settings;
+	- Database Backup History.
+3. Extra parameters (Assuming there are no Databases with one charachter name):
+	N - Sorts Databases by Name;
+	D - Sorts Databases by Creation Date/Time;
+	S - Sorts Database files by Size (Desc);
+	U - Sorts Database files by Usage percentage (Desc);
+	W - Sorts Database files by Write/Read Waits (Desc);
+	C - Filters Databases, which are not in Current compatability mode;
+	B - Filters Databases, which are in BULK recovery model;
+	F - Filters Databases, which are in FULL recovery model;
+	L - Filters Databases, which are in SIMPLE recovery model;
+	M - Filters Databases, which are not in MULTI_USER mode;
+	O - Filters Databases, which are not ONLINE;
+	R - Filters Databases, which are in Read-Only Mode;
+4. Availability Group name: AG Info.
+----------------------------------------------------------------------------------------------
+-- Ctrl+6 (Current State and Activity)
+Function Ctrl-6 Options: SQL Server Current State and Activity.
+1. No options: Returns List of currently running tasks, list of all user opened trnsactions and Current Waits stats.
+2. Letter "B": Returns only running blocking chains.
+3. Letter "S": Returns data in simple mode without Query Plan.
+4. Letter "W": Returns Only Current Waits stats.
+5. Letter "W" + Number of seconds : Returns Waits Stats Delta (Including I/O). (Max=999) (Example: "W10" Returns Delta waits within 10 seconds).
+6. Letter "M": Concentrate on Memory. Adds Memory allocation per database.
+7. Letter "C": Concentrate on CPU Utilization. Adds dm_os_schedulers, dm_os_workers & dm_os_waiting_tasks.
+8. Letter "I": Information about SQL Server, Windows and SQL Services. Current Trace Flags.
+9. Letter "L": SQL Server Error Log.
+10. Letter "L" + Log File Number: Older SQL Server Error Log File.
+11. Any word: Search in SQL Server Error Log. (Example: "Microsoft")
+----------------------------------------------------------------------------------------------
+-- Ctrl+7 (Sessions)
+Returns information about current sessions.
+With parametes gives information about Backups, Jobs and their history.
+Parameters:
+* (No Parameters) - Returns:
+	- Full list of current sessions.
+	- List of TCP endpoints.
+	- List of TCP listeners.
+* Number - filter by Session ID
+* IP Address or "<local machine>" - filter by client Net address.
+"S" - SQL Agent Settings (Including SQL Mail).
+"B" - Lists backups. Checks backup file existence for the last 1000 backups.
+"F","L","D","O" - Lists different backup types (F-Full;L-Log;D-Differential;O-Other).
+* Database name - Lists backups for that Database.
+"J" - Lists jobs.
+Job name - Information about of selected job, including steps and schedules.
+"H" - History of SQL agent Jobs as of today.
+"H#" - History of SQL agent Jobs for any day back. Example: "H1" - Yesterday, "H5" - 5 days ago.
+"H20170720" - History of SQL agent Jobs for any date back.
+"A" - List of Alerts.
+"M" - Mailing history.
+* mailitem_id - Returns individual email settings/log with email body
+----------------------------------------------------------------------------------------------
+-- Ctrl+8 (Query Cache)
+Function Ctrl-8 Options: SQL Server Query Cache.
+1. No options: Returns: % of Adhoc Queries; TOP 1000 List of all queries stored in SQL Server Cache and
+a Diagram with three sets of TOP 5 queries by Timing, I/O usage and number of executions (see the "Spatial" tab).
+2. "X": Query Plan in XML format. (Might generate an error: "XML datatype instance has too many levels of nested nodes. Maximum allowed depth is 128 levels.")
+3. Part of a query: Will search (TOP 1000) for that part of a query within SQL Server Cache.
+4. sql_hqsh or plan_handle: Returns all plans for particular SQL Query or only one plan for plan_handle
+5. "P" - Information about parallelism in current list of query plans. Might take long time to run.
+Parameter Base Type: varchar
+----------------------------------------------------------------------------------------------
+-- Ctrl+9 (Statistics)
+Function Ctrl-9 Options: SQL Server Statistics.
+1. No options: Returns List of all Statistics in current DB.
+2. Table Name: Returns List of all Statistics for specified table (Applicable for SQL Server 2008R2 SP2 or higher).
+3. Statistic name: Returns Statistics' Header, Density Vector and Histogram.
+----------------------------------------------------------------------------------------------
+-- Ctrl+0 (Objects)
+Function Ctrl-0 Options: SQL Server Objects.
+1. No options: Returns List of all tables and List all objects in current DB.
+	It is normal that tables with less records are bigger in size.
+2. Object Name/ID: Object's code or full description.
+3. Index/Table name (+ parameter): Gives info about index allocation. Second is reporting mode: SAMPLED or DETAILED.
+For system tables requires fully specifired name like: 'sys.objects'.
+Does not handle: Synonyms, Defaults, Constraints.
+Example 1: tbl_MyTable 
+Example 2: 'CLUIX_MyTable','DETAILED' 
+----------------------------------------------------------------------------------------------
+
+
+
