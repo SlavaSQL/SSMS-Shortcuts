@@ -1,0 +1,30 @@
+Project includes 9 SQL Server queries, which can be copy-pasted to SSMS Keyboard shortcuts and used by simple keystrokes against SQL Servers.
+Fully supported for SQL Server versions 2012 and up. 
+Some keystroke queries work on SQL Servers 2008 & 2008R2.
+
+Essential SQL Server permissions to run scripts:
+- CONNECT SQL
+- VIEW ANY DATABASE
+- VIEW ANY DEFINITION
+- VIEW SERVER STATE
+
+Desired SQL Server permissions to run scripts for problem troubleshooting:
+- EXECUTE xp_readerrorlog
+- SELECT DATABASE [msdb]
+
+Ideal SQL Server permissions to run all functionality:
+- Member of sysadmin role.
+
+Disclosures:
+1. Scripts might not work well against Express editions.
+2. Maximum query size is 32768 bytes.
+3. Queries can not contain carriage return symbol (0x0D). The only option is to use end of a line symbol (0x0A).
+4. Scripts don not do ANY changes in ANY database except temporary objects in "tempdb" database. List of objects is in separate document.
+5. Scripts are not tested in all possible environments and under all possible circumstances and provided AS IS. In case of any run-time error, output scripts can be easily modified to avoid blocking, configuration of security constrains.
+
+Installation process:
+- Start SSMS
+- Open "Tools" from the Menu (Alt+T)
+- Choose "Options" from "Tools" (+O)
+- Tabs: Environment-> Keyboard-> Query Shortcuts
+- Copy-paste file contents accordingly.
