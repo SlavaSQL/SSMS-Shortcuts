@@ -1,5 +1,6 @@
 Need fix for Ctrl+4 - Does not show schema names
 Queue: Ctrl-1 - list of indexes for partitioned table
+2019-12-11	Ctrl-5	Added parameter "A" for AGs and additional columns for AG's output.
 2019-12-10	Ctrl-5	Added "last_commit_time" for a database to AG report.
 2019-12-10	Ctrl-F1	Fixed Compression suggestions for partitioned table.
 2019-12-09	Ctrl-4	Fixed Excluded Heap from "unused indexes" and put indexes wit zero usage on top.

@@ -1,4 +1,4 @@
-/*5 - 2019-12-10 DB Info
+/*5 - 2019-12-11 DB Info
 Consolidated by Slava Murygin
 http://slavasql.blogspot.com/2016/02/ssms-query-shortcuts.html */
 
@@ -95,23 +95,23 @@ read_only_routing_url NVARCHAR(256),
 [Listener Port] INT,
 ip_configuration_string_from_cluster NVARCHAR(4000),
 [Current Listener State] NVARCHAR(max),
-recovery_lsn NUMERIC(25, 0),
-truncation_lsn NUMERIC(25, 0),
-last_sent_lsn NUMERIC(25, 0),
+recovery_lsn NUMERIC(25,0),
+truncation_lsn NUMERIC(25,0),
+last_sent_lsn NUMERIC(25,0),
 last_sent_time DATETIME,
-last_received_lsn NUMERIC(25, 0),
+last_received_lsn NUMERIC(25,0),
 last_received_time DATETIME,
-last_hardened_lsn NUMERIC(25, 0),
+last_hardened_lsn NUMERIC(25,0),
 last_hardened_time DATETIME,
-last_redone_lsn NUMERIC(25, 0),
+last_redone_lsn NUMERIC(25,0),
 last_redone_time DATETIME,
 log_send_queue_size BIGINT,
 log_send_rate BIGINT,
 redo_queue_size BIGINT,
 redo_rate BIGINT,
 filestream_send_rate BIGINT,
-end_of_log_lsn NUMERIC(25, 0),
-last_commit_lsn NUMERIC(25, 0),
+end_of_log_lsn NUMERIC(25,0),
+last_commit_lsn NUMERIC(25,0),
 last_commit_time DATETIME);
 GO
 CREATE TABLE #tbl_VLFCountResults([DB_id] INT, VLFCount INT);
@@ -152,7 +152,8 @@ PRINT '3. Extra parameters (Assuming there are no Databases with one charachter 
 	L - Filters Databases, which are in SIMPLE recovery model;
 	M - Filters Databases, which are not in MULTI_USER mode;
 	O - Filters Databases, which are not ONLINE;
-	R - Filters Databases, which are in Read-Only Mode;';
+	R - Filters Databases, which are in Read-Only Mode;
+	A - List Availability groups with Databases;';
 PRINT '4. Availability Group name: AG Info.'
 
 DECLARE @S CHAR(80), @V INT; --SQL Server Major Version
@@ -169,6 +170,11 @@ SELECT @V=CAST(CAST(SERVERPROPERTY('ProductVersion') as CHAR(2)) as NUMERIC)
 	, @DBid=CASE WHEN @Param is Null THEN 0
 		WHEN DB_ID(@Param) Is Null THEN -1 ELSE DB_ID(@Param) END
 FROM sys.databases WHERE database_id = 1;
+
+TRUNCATE TABLE #tbl_AG_DBs;
+TRUNCATE TABLE #tbl_DB_Statistics;
+TRUNCATE TABLE #tbl_VLFInfo;
+TRUNCATE TABLE #tbl_VLFCountResults;
 
 PRINT @S;
 IF LEN(@Param)=1 and @DBid=-1
@@ -265,24 +271,23 @@ OPTION (QUERYTRACEON 9481, RECOMPILE)
 	IF EXISTS ( SELECT TOP 1 1 FROM #tbl_AG_DBs) SET @ag_present = 1;
 END
 
-IF LEN(@Param) > 1 and @ag_present = 1 and @DBid = -1 and @V >= 11
-IF EXISTS (SELECT TOP 1 1 FROM sys.availability_groups WHERE name = @Param)
+IF @ag_present = 1 and @DBid = -1 and @V >= 11 and
+	(EXISTS (SELECT TOP 1 1 FROM sys.availability_groups WHERE name = @Param) OR ASCII(@P) = 65) 
 BEGIN
 	/* Return info for individual AG*/
 	SET @SQL = 'SELECT [AG Name], replica_server_name, [Replica Owner], [DB_Name]
 , last_commit_time, Position, is_local, [Status], [State], [Join State]
 , availability_mode_desc, failover_mode_desc
 , session_timeout, [Is Readable], create_date, modify_date, backup_priority
-, [Recovery Status], [Replica Sync Health]
-, [Last Error #], [Last Error DT], [Commit participant]
-, [DB State], Suspended, [Suspend Reason]
-, endpoint_url, read_only_routing_url
-, recovery_lsn, truncation_lsn, last_sent_lsn, last_sent_time
+, [Recovery Status], [Replica Sync Health], [Last Error #], [Last Error DT]
+, [Commit participant], [DB State], Suspended, [Suspend Reason]
+, endpoint_url, [Listener DNS Name], [Listener Port]
+, ip_configuration_string_from_cluster, [Current Listener State]
+, read_only_routing_url, recovery_lsn, truncation_lsn, last_sent_lsn, last_sent_time
 , last_received_lsn, last_received_time, last_hardened_lsn, last_hardened_time
 , last_redone_lsn, last_redone_time, end_of_log_lsn, last_commit_lsn
 , log_send_queue_size, log_send_rate, redo_queue_size, redo_rate, filestream_send_rate
-FROM #tbl_AG_DBs
-WHERE [AG Name] = '''+@Param+'''
+FROM #tbl_AG_DBs ' + CASE ASCII(@P) WHEN 65 THEN '' ELSE 'WHERE [AG Name] = '''+@Param+'''' END + '
 ORDER BY replica_server_name, [DB_Name]
 '+@or;
 	PRINT @SQL;
