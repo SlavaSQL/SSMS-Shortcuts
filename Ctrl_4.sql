@@ -1,4 +1,4 @@
-/* 4 - 2019-12-09 Returns Index Troubleshooting
+/* 4 - 2019-12-16 Returns Index Troubleshooting
 Consolidated by Slava Murygin
 http://slavasql.blogspot.com/2016/02/ssms-query-shortcuts.html */
 
@@ -219,52 +219,66 @@ BEGIN
 	EXEC (@Top10Missing);
 
 END
-ELSE IF EXISTS ( SELECT TOP 1 1 FROM sys.indexes WHERE name = @Object_Name)
+
+IF EXISTS ( SELECT TOP 1 1 FROM sys.indexes with (nolock) WHERE name = @Object_Name)
+	OR EXISTS (SELECT TOP 1 1 FROM sys.indexes with (nolock)
+		WHERE object_id = OBJECT_ID(@Object_Name) and index_id = 0)
 BEGIN /* Report Index */
 
 	SELECT @oid = object_id, @iid = index_id
 	FROM sys.indexes
-	WHERE name = @Object_Name
+	WHERE name = @Object_Name OR (object_id = OBJECT_ID(@Object_Name) and index_id = 0)
 
-	SET @SQL = 'SELECT ''INDEX'' as [Object Type]
-	, SCHEMA_NAME(o.schema_id) as [Schema_Name]
-	, o.Name as [Table/View Name]
-	, i.name as Index_Name
-	, i.type_desc
-	, CASE i.is_Unique WHEN 0 THEN ''No'' ELSE ''Yes'' END as Is_Unique
-	, CASE i.ignore_dup_key WHEN 0 THEN ''No'' ELSE ''Yes'' END as Ignore_Dup_Key
-	, CASE i.fill_factor when 0 then 100 ELSE i.fill_factor END Fill_Factor
-	, CASE i.is_disabled WHEN 0 THEN ''No'' ELSE ''Yes'' END as Is_Disabled
-	, CASE i.has_filter WHEN 0 THEN ''No'' ELSE ''Yes'' END as Has_Filter
-	, IsNull(i.filter_definition,'''') as Filter_Definition
-	, i.object_id
-	, i.index_id
-	FROM sys.indexes as i
-	INNER JOIN sys.objects AS o on o.object_id = i.object_id
-	WHERE i.index_id = ' + CAST(@iid as VARCHAR) + ' and i.object_id = ' + CAST(@oid as VARCHAR) + '
-	OPTION (RECOMPILE);';
-	PRINT @SQL;
-	RAISERROR (@S,10,1) WITH NOWAIT
-	EXEC (@SQL);
+	If @iid = 0
+		PRINT 'Table does not have clustered index. Will provide HEAP information.' + CHAR(10) + @S;
+	ELSE
+	BEGIN
+		SET @SQL = 'SELECT ''INDEX'' as [Object Type]
+		, SCHEMA_NAME(o.schema_id) as [Schema_Name]
+		, o.Name as [Table/View Name]
+		, i.name as Index_Name
+		, i.type_desc
+		, CASE i.is_Unique WHEN 0 THEN ''No'' ELSE ''Yes'' END as Is_Unique
+		, CASE i.ignore_dup_key WHEN 0 THEN ''No'' ELSE ''Yes'' END as Ignore_Dup_Key
+		, CASE i.fill_factor when 0 then 100 ELSE i.fill_factor END Fill_Factor
+		, CASE i.is_disabled WHEN 0 THEN ''No'' ELSE ''Yes'' END as Is_Disabled
+		, CASE i.has_filter WHEN 0 THEN ''No'' ELSE ''Yes'' END as Has_Filter
+		, IsNull(i.filter_definition,'''') as Filter_Definition
+		, i.object_id
+		, i.index_id
+		FROM sys.indexes as i
+		INNER JOIN sys.objects AS o on o.object_id = i.object_id
+		WHERE i.index_id = ' + CAST(@iid as VARCHAR) + ' and i.object_id = ' + CAST(@oid as VARCHAR) + '
+		OPTION (RECOMPILE);';
+		PRINT @SQL;
+		RAISERROR (@S,10,1) WITH NOWAIT
+		EXEC (@SQL);
 	
-	SET @SQL = 'SELECT c.name as Index_Column
-	, CASE ic.is_included_column WHEN 0 THEN ''No'' ELSE ''Yes'' END as Included
-	, CASE c.is_nullable WHEN 0 THEN ''No'' ELSE ''Yes'' END as Is_Nullable
-	, t.name as Column_Type
-	, c.max_length
-	, c.precision
-	, c.scale
-	, c.collation_name
-	FROM sys.indexes as i
-	INNER JOIN sys.objects AS o on o.object_id = i.object_id
-	INNER JOIN sys.index_columns as ic on ic.object_id = i.object_id and i.index_id = ic.index_id
-	INNER JOIN sys.columns as c on c.object_id = i.object_id and ic.column_id = c.column_id
-	INNER JOIN sys.types as t ON t.system_type_id =c.system_type_id
-	WHERE i.index_id = ' + CAST(@iid as VARCHAR) + ' and i.object_id = ' + CAST(@oid as VARCHAR) + '
-	OPTION (RECOMPILE);';
-	PRINT @SQL;
-	RAISERROR (@S,10,1) WITH NOWAIT
-	EXEC (@SQL);
+		SET @SQL = 'SELECT c.name as Index_Column
+		, CASE ic.is_included_column WHEN 0 THEN ''No'' ELSE ''Yes'' END as Included
+		, CASE c.is_nullable WHEN 0 THEN ''No'' ELSE ''Yes'' END as Is_Nullable
+		, t.name as Column_Type
+		, c.max_length
+		, c.precision
+		, c.scale
+		, c.collation_name
+		FROM sys.indexes as i
+		INNER JOIN sys.objects AS o on o.object_id = i.object_id
+		INNER JOIN sys.index_columns as ic on ic.object_id = i.object_id and i.index_id = ic.index_id
+		INNER JOIN sys.columns as c on c.object_id = i.object_id and ic.column_id = c.column_id
+		INNER JOIN sys.types as t ON t.system_type_id =c.system_type_id
+		WHERE i.index_id = ' + CAST(@iid as VARCHAR) + ' and i.object_id = ' + CAST(@oid as VARCHAR) + '
+		OPTION (RECOMPILE);';
+		PRINT @SQL;
+		RAISERROR (@S,10,1) WITH NOWAIT
+		EXEC (@SQL);
+
+		/* Report Index usage */
+		SET @IndexUsage += ' WHERE i.name = ''' + @Object_Name + ''' OPTION (RECOMPILE);'
+		PRINT @IndexUsage;
+		RAISERROR (@S,10,1) WITH NOWAIT
+		EXEC (@IndexUsage);
+	END
 
 	/* Report Index allocation */
 	SET @SQL = 'SELECT OBJECT_NAME(' + CAST(@oid as VARCHAR) + ') AS TableName,
@@ -293,11 +307,6 @@ BEGIN /* Report Index */
 	PRINT @SQL;
 	RAISERROR (@S,10,1) WITH NOWAIT
 	EXEC (@SQL);
-
-	/* Report Index usage */
-	SET @IndexUsage += ' WHERE i.name = ''' + @Object_Name + ''' OPTION (RECOMPILE);'
-	PRINT @IndexUsage;
-	EXEC (@IndexUsage);
 
 	IF  @V > 10
 	BEGIN
