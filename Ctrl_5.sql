@@ -1,4 +1,4 @@
-/*5 - 2019-12-11 DB Info
+/*5 - 2019-12-20 DB Info
 Consolidated by Slava Murygin
 http://slavasql.blogspot.com/2016/02/ssms-query-shortcuts.html */
 
@@ -271,8 +271,8 @@ OPTION (QUERYTRACEON 9481, RECOMPILE)
 	IF EXISTS ( SELECT TOP 1 1 FROM #tbl_AG_DBs) SET @ag_present = 1;
 END
 
-IF @ag_present = 1 and @DBid = -1 and @V >= 11 and
-	(EXISTS (SELECT TOP 1 1 FROM sys.availability_groups WHERE name = @Param) OR ASCII(@P) = 65) 
+IF @ag_present = 1 and @DBid = -1 and @V >= 11 /*Double If to prevent error in SQL2008*/
+IF (EXISTS (SELECT TOP 1 1 FROM sys.availability_groups WHERE name = @Param) OR ASCII(@P) = 65) 
 BEGIN
 	/* Return info for individual AG*/
 	SET @SQL = 'SELECT [AG Name], replica_server_name, [Replica Owner], [DB_Name]
@@ -575,6 +575,8 @@ LEFT JOIN [#tbl_DB_CPU%] as dbs ON dbs.DatabaseID = d.database_id
 	RAISERROR (@S,10,1) WITH NOWAIT
 	EXEC (@SQL);
 
+IF @V >= 11
+BEGIN
 SET @SQL = 'SELECT [Mount Point]=vs.volume_mount_point
 ,[Avg Read Wait, ms]=CAST(ROUND(( SUM(s.io_stall_read_ms) / ( 1.0 + SUM(s.num_of_reads) ) ),3) as FLOAT)
 ,[Avg Write Wait, ms]=CAST(ROUND(( SUM(s.io_stall_write_ms) / ( 1.0 + SUM(s.num_of_writes) ) ),3) as FLOAT)
@@ -590,6 +592,7 @@ GROUP BY vs.volume_mount_point, vs.file_system_type, vs.logical_volume_name, vs.
 	PRINT @SQL
 	RAISERROR (@S,10,1) WITH NOWAIT
 	EXEC (@SQL);
+END
 
 IF @ag_present > 0
 BEGIN

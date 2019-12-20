@@ -34,32 +34,33 @@ If @Object_Name COLLATE database_default Is not Null
 DECLARE @SQL NVARCHAR(MAX);
 
 DECLARE @Top10Unused  NVARCHAR(MAX) =
-'SELECT TOP 10 Table_Name = t.name
-		, Last_Object_Modification = t.modify_date
-		, [Bad Index Name] = i.name
-		, i.index_id
-		' + CASE WHEN @V > 10 THEN ', ps.Page_Count' ELSE '' END +
-		', [Indexed Columns] = SUBSTRING(
-			(
-			SELECT '', '' + c.name
-			FROM sys.index_columns as ic
-			INNER JOIN sys.columns as c ON c.object_id = ic.object_id and ic.column_id = c.column_id
-			WHERE ic.object_id = s.object_id  and ic.index_id = s.index_id and ic.is_included_column = 0
-			FOR XML PATH('''')
-			),3,2147483647		
-		)
-		, [Included Columns] = SUBSTRING(IsNull(
-			(
-			SELECT '', '' + c.name
-			FROM sys.index_columns as ic
-			INNER JOIN sys.columns as c ON c.object_id = ic.object_id and ic.column_id = c.column_id
-			WHERE ic.object_id = s.object_id  and ic.index_id = s.index_id and ic.is_included_column = 1
-			FOR XML PATH('''')
-			),''''),3,2147483647		
-		)
-		, Total_Writes =  s.user_updates
-		, Total_Reads = s.user_seeks + s.user_scans + s.user_lookups
-		, Factor = (s.user_updates - s.user_seeks - s.user_scans - s.user_lookups - 1.) / s.user_updates
+'SELECT TOP 10 [Schema Name] = SCHEMA_NAME(t.[schema_id])
+	, [Table Name] = t.name
+	, Last_Object_Modification = t.modify_date
+	, [Bad Index Name] = i.name
+	, i.index_id
+	' + CASE WHEN @V > 10 THEN ', ps.Page_Count' ELSE '' END +
+	', [Indexed Columns] = SUBSTRING(
+		(
+		SELECT '', '' + c.name
+		FROM sys.index_columns as ic
+		INNER JOIN sys.columns as c ON c.object_id = ic.object_id and ic.column_id = c.column_id
+		WHERE ic.object_id = s.object_id  and ic.index_id = s.index_id and ic.is_included_column = 0
+		FOR XML PATH('''')
+		),3,2147483647		
+	)
+	, [Included Columns] = SUBSTRING(IsNull(
+		(
+		SELECT '', '' + c.name
+		FROM sys.index_columns as ic
+		INNER JOIN sys.columns as c ON c.object_id = ic.object_id and ic.column_id = c.column_id
+		WHERE ic.object_id = s.object_id  and ic.index_id = s.index_id and ic.is_included_column = 1
+		FOR XML PATH('''')
+		),''''),3,2147483647		
+	)
+	, Total_Writes =  s.user_updates
+	, Total_Reads = s.user_seeks + s.user_scans + s.user_lookups
+	, Factor = (s.user_updates - s.user_seeks - s.user_scans - s.user_lookups - 1.) / s.user_updates
 FROM sys.dm_db_index_usage_stats AS s
 INNER JOIN sys.indexes AS i ON s.object_id = i.object_id AND i.index_id = s.index_id
 INNER JOIN sys.tables as t on i.[object_id] = t.[object_id]
@@ -79,7 +80,8 @@ OPTION (RECOMPILE);';
 */
 DECLARE @Top10Missing  NVARCHAR(MAX) =
 'SELECT TOP 10
-	Affected_Table = t.name
+	[Schema Name] = SCHEMA_NAME(t.[schema_id])
+	, [Affected Table] = t.name
 	, SQL_Statement = ''CREATE NONCLUSTERED INDEX NCIX_'' + t.name COLLATE DATABASE_DEFAULT + ''_''
 		+ REPLACE(REPLACE(REPLACE(IsNull(mid.equality_columns,mid.inequality_columns), ''], ['', ''_''), ''['', ''''),'']'', '''')
 		+ '' ON '' + mid.STATEMENT + '' ('' + IsNull(mid.equality_columns,'''')
@@ -101,7 +103,8 @@ INNER Join sys.tables AS t ON mid.object_id = t.object_id
 WHERE mid.database_id = DB_ID()';
 
 DECLARE @IndexUsage  NVARCHAR(MAX) =
-'SELECT OBJECT_NAME(i.object_id) AS [OBJECT NAME],
+'SELECT [Schema Name] = SCHEMA_NAME(t.[schema_id])
+	, [OBJECT NAME] = OBJECT_NAME(i.object_id),
 	t.modify_date as Last_Object_Modification,
 	[INDEX NAME]=ISNUll(i.name,''HEAP-''+ps.alloc_unit_type_desc)
 	' + CASE WHEN @V > 10 THEN ', ps.Page_Count' ELSE '' END +
@@ -281,13 +284,14 @@ BEGIN /* Report Index */
 	END
 
 	/* Report Index allocation */
-	SET @SQL = 'SELECT OBJECT_NAME(' + CAST(@oid as VARCHAR) + ') AS TableName,
-		i.name AS TableIndexName,
+	SET @SQL = 'SELECT [Schema Name] = SCHEMA_NAME(o.[schema_id])
+	, [Table Name] = OBJECT_NAME(' + CAST(@oid as VARCHAR) + '),
+		[Table Index Name] = i.name,
 		ps.index_id,
 		ps.index_level,
 		ps.index_type_desc,
 		ps.alloc_unit_type_desc,
-		ps.index_depth	index_level,
+		ps.index_depth, index_level,
 		CASE WHEN i.fill_factor = 0 OR (ps.index_level > 0 and i.is_padded = 0)
 		THEN 100 ELSE i.fill_factor END AS fill_factor,
 		ROUND(ps.avg_fragmentation_in_percent,3) as [AVG Frgmnt %],
@@ -301,6 +305,7 @@ BEGIN /* Report Index */
 		ps.ghost_record_count,
 		ps.forwarded_record_count
 	FROM sys.indexes i
+	INNER JOIN sys.objects as o ON o.object_id = i.object_id
 	CROSS APPLY sys.dm_db_index_physical_stats(DB_ID(), ' + CAST(@oid as VARCHAR) + ', ' + CAST(@iid as VARCHAR) + ', NULL, ''DETAILED'') ps
 	WHERE i.index_id = ' + CAST(@iid as VARCHAR) + ' and i.object_id = ' + CAST(@oid as VARCHAR) + '
 	OPTION (RECOMPILE);';
@@ -311,8 +316,9 @@ BEGIN /* Report Index */
 	IF  @V > 10
 	BEGIN
 		/* Report Index page allocation */
-		SET @SQL = 'SELECT DB_NAME() as Database_Name,
-			OBJECT_NAME(i.object_id)  as Table_Name,
+		SET @SQL = 'SELECT [Database Name]=DB_NAME(),
+			[Schema Name] = SCHEMA_NAME(o.[schema_id])
+		, [Table Name] = OBJECT_NAME(i.object_id),
 			i.Index_id,
 			a.allocation_unit_type,
 			a.allocation_unit_type_desc,
@@ -330,6 +336,7 @@ BEGIN /* Report Index */
 			a.previous_page_page_id,
 			a.is_page_compressed
 		FROM sys.indexes AS i
+		INNER JOIN sys.objects as o ON o.object_id = i.object_id
 		CROSS APPLY sys.dm_db_database_page_allocations(DB_ID(),' + CAST(@oid as VARCHAR) + ', ' + CAST(@iid as VARCHAR) + ', NULL, ''DETAILED'') a
 		WHERE i.index_id = ' + CAST(@iid as VARCHAR) + ' and i.object_id = ' + CAST(@oid as VARCHAR) + '
 		ORDER BY a.page_level DESC, a.previous_page_page_id, a.extent_page_id, a.allocated_page_page_id
