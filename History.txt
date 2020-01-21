@@ -1,3 +1,5 @@
+2020-01-21	Ctrl-F1 Fixed join for a single table. 
+2020-01-21	Ctrl-4  Added index alloc_unit_type_desc. 
 2019-12-20	Ctrl-4  Added schema names for objects and indexes. 
 2019-12-20	Ctrl-5  Fixed for SQL 2008. 
 2019-12-16	Ctrl-4	Added physical allocation for HEAPs.

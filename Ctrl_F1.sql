@@ -1,4 +1,4 @@
-/* Ctrl-F1 - 2019-12-10 List Tables
+/* Ctrl-F1 - 2020-01-21 List Tables
 Consolidated by Slava Murygin
 http://slavasql.blogspot.com/2016/02/ssms-query-shortcuts.html */
 IF OBJECT_ID('tempdb..#USP_GETSTAT') IS NOT NULL
@@ -218,8 +218,10 @@ FROM sys.dm_db_index_physical_stats('
 	/*Specifying Reporting Mode*/
 	+ ', NULL, ''' + @Parameter2 COLLATE database_default + ''') ps
 INNER JOIN sys.indexes i ON i.OBJECT_ID = ps.OBJECT_ID AND i.index_id = ps.index_id
-INNER JOIN sys.partitions AS p with (NOLOCK) ON ps.index_id = p.index_id
-WHERE ps.partition_number = p.partition_number and p.object_id = ' + CAST(@Object_Id as NVARCHAR) + '
+INNER JOIN sys.partitions AS p with (NOLOCK) 
+	ON ps.partition_number = p.partition_number 
+		and ps.index_id = p.index_id and p.object_id = i.object_id
+WHERE p.object_id = ' + CAST(@Object_Id as NVARCHAR) + '
 ORDER BY i.index_id, ps.partition_number
 OPTION (RECOMPILE);';
 	PRINT @SQL;

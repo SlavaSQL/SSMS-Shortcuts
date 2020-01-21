@@ -1,4 +1,4 @@
-/* 4 - 2019-12-16 Returns Index Troubleshooting
+/* 4 - 2020-01-21 Returns Index Troubleshooting
 Consolidated by Slava Murygin
 http://slavasql.blogspot.com/2016/02/ssms-query-shortcuts.html */
 
@@ -103,12 +103,14 @@ INNER Join sys.tables AS t ON mid.object_id = t.object_id
 WHERE mid.database_id = DB_ID()';
 
 DECLARE @IndexUsage  NVARCHAR(MAX) =
-'SELECT [Schema Name] = SCHEMA_NAME(t.[schema_id])
-	, [OBJECT NAME] = OBJECT_NAME(i.object_id),
-	t.modify_date as Last_Object_Modification,
-	[INDEX NAME]=ISNUll(i.name,''HEAP-''+ps.alloc_unit_type_desc)
-	' + CASE WHEN @V > 10 THEN ', ps.Page_Count' ELSE '' END +
-	',o.partition_number
+'SELECT [OBJECT NAME] = QuoteName(SCHEMA_NAME(t.[schema_id])) 
+		+ ''.'' + QuoteName(OBJECT_NAME(i.object_id))
+	,[Last Object Modification]=t.modify_date
+	,[INDEX NAME]=ISNUll(i.name,''HEAP'')
+		+ CASE ps.alloc_unit_type_desc WHEN ''IN_ROW_DATA'' THEN '''' 
+			ELSE '' - ''+ps.alloc_unit_type_desc END
+	,o.partition_number
+	,ps.Page_Count
 	,[Indexed Columns] = SUBSTRING(
 		(SELECT '', '' + c.name
 		FROM sys.index_columns as ic
