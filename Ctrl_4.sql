@@ -185,8 +185,8 @@ SELECT
 	CAST(ROUND(ps.page_count * (100 - ps.avg_page_space_used_in_percent) / 12800.,3) as Decimal(9,3)) as [Reserved, Mb],
 	CAST(ROUND(100 - ps.avg_page_space_used_in_percent * 100
 	/ (CASE i.fill_factor WHEN 0 THEN 100 ELSE i.fill_factor END),3) as Decimal(9,3)) as [Space Overuse %]
-FROM sys.dm_db_index_physical_stats(' + @dbid + ', NULL, NULL, NULL, ''SAMPLED'') ps
-INNER JOIN sys.indexes i ON i.OBJECT_ID = ps.OBJECT_ID AND i.index_id = ps.index_id
+FROM sys.indexes as i
+OUTER APPLY sys.dm_db_index_physical_stats(' + @dbid + ', i.object_id, i.index_id, NULL, ''SAMPLED'') ps
 OUTER APPLY (
 	SELECT ''Yes'' FROM sys.index_columns as ic
 	INNER JOIN sys.columns as c
