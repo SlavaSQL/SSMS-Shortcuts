@@ -1,4 +1,4 @@
-/* 4 - 2020-01-21 Returns Index Troubleshooting
+/* 4 - 2020-01-28 Returns Index Troubleshooting
 Consolidated by Slava Murygin
 http://slavasql.blogspot.com/2016/02/ssms-query-shortcuts.html */
 
@@ -13,9 +13,11 @@ SET NOCOUNT ON
 DECLARE @oid INT, @iid INT;
 DECLARE @S CHAR(80);
 DECLARE @V INT; --SQL Server Major Version
+DECLARE @dbid VARCHAR(10);
 
 SELECT @V = CAST(CAST(SERVERPROPERTY('ProductVersion') as CHAR(2)) as NUMERIC)
-	, @S = REPLICATE('-',80);
+	, @S = REPLICATE('-',80)
+	, @dbid = CAST(DB_ID() as VARCHAR(10));
 
 PRINT 'Function Ctrl-4: SQL Server Index Troubleshooting.';
 PRINT '1. No options: Returns following: ';
@@ -64,14 +66,13 @@ DECLARE @Top10Unused  NVARCHAR(MAX) =
 FROM sys.dm_db_index_usage_stats AS s
 INNER JOIN sys.indexes AS i ON s.object_id = i.object_id AND i.index_id = s.index_id
 INNER JOIN sys.tables as t on i.[object_id] = t.[object_id]
-' + CASE WHEN @V > 10 THEN 'CROSS APPLY sys.dm_db_index_physical_stats(DB_ID(), i.object_id, i.index_id, NULL, ''LIMITED'') as ps' ELSE '' END + '
-INNER JOIN sys.dm_db_index_operational_stats (DB_ID(),NULL,NULL,NULL ) o
-	ON i.[object_id] = o.[object_id] AND i.index_id = o.index_id
+' + CASE WHEN @V > 10 THEN 'OUTER APPLY sys.dm_db_index_physical_stats(' + @dbid + ', i.object_id, i.index_id, NULL, ''LIMITED'') as ps ' ELSE '' END + '
+OUTER APPLY sys.dm_db_index_operational_stats (' + @dbid + ',i.[object_id],i.index_id,NULL ) o
 WHERE objectproperty(s.object_id,''IsUserTable'') = 1
-AND s.database_id = db_id()
+AND s.database_id = ' + @dbid + '
 AND s.user_updates > (s.user_seeks + s.user_scans + s.user_lookups)
 AND NOT (o.leaf_insert_count = 0' + CASE WHEN @V > 10 THEN ' and ps.Page_Count = 0' ELSE '' END +	')
-AND i.index_id <> 0
+AND i.index_id <> 0 
 ORDER BY s.user_seeks + s.user_scans + s.user_lookups ASC, Factor DESC
 OPTION (RECOMPILE);';
 /*
@@ -100,7 +101,7 @@ INNER Join sys.dm_db_missing_index_group_stats AS migs
 INNER Join sys.dm_db_missing_index_details AS mid
 	ON mig.index_handle = mid.index_handle
 INNER Join sys.tables AS t ON mid.object_id = t.object_id
-WHERE mid.database_id = DB_ID()';
+WHERE mid.database_id = ' + @dbid + '';
 
 DECLARE @IndexUsage  NVARCHAR(MAX) =
 'SELECT [OBJECT NAME] = QuoteName(SCHEMA_NAME(t.[schema_id])) 
@@ -141,12 +142,11 @@ DECLARE @IndexUsage  NVARCHAR(MAX) =
 	,u.last_system_lookup
 	,u.last_system_update
 FROM sys.indexes AS i with (nolock)
-INNER JOIN sys.dm_db_index_operational_stats(DB_ID(),NULL,NULL,NULL ) o
-	ON i.object_id = o.object_id AND i.index_id = o.index_id
+OUTER APPLY sys.dm_db_index_operational_stats(' + @dbid + ',i.object_id,i.index_id,NULL ) o
 INNER JOIN sys.tables as t with (nolock) on i.object_id = t.object_id
-' + CASE WHEN @V > 10 THEN 'CROSS APPLY sys.dm_db_index_physical_stats(DB_ID(), i.object_id, i.index_id, o.partition_number, ''LIMITED'') as ps' ELSE '' END + '
+' + CASE WHEN @V >= 10 THEN 'OUTER APPLY sys.dm_db_index_physical_stats(' + @dbid + ', i.object_id, i.index_id, o.partition_number, ''LIMITED'') as ps' ELSE '' END + '
 LEFT JOIN sys.dm_db_index_usage_stats AS u with (nolock)
-	ON i.object_id = u.object_id AND i.index_id = u.index_id and u.database_id = DB_ID() ';
+	ON i.object_id = u.object_id AND i.index_id = u.index_id and u.database_id = ' + @dbid + ' ';
 
 IF @Object_Name COLLATE database_default Is Null
 BEGIN
@@ -185,7 +185,7 @@ SELECT
 	CAST(ROUND(ps.page_count * (100 - ps.avg_page_space_used_in_percent) / 12800.,3) as Decimal(9,3)) as [Reserved, Mb],
 	CAST(ROUND(100 - ps.avg_page_space_used_in_percent * 100
 	/ (CASE i.fill_factor WHEN 0 THEN 100 ELSE i.fill_factor END),3) as Decimal(9,3)) as [Space Overuse %]
-FROM sys.dm_db_index_physical_stats(DB_ID(), NULL, NULL, NULL, ''SAMPLED'') ps
+FROM sys.dm_db_index_physical_stats(' + @dbid + ', NULL, NULL, NULL, ''SAMPLED'') ps
 INNER JOIN sys.indexes i ON i.OBJECT_ID = ps.OBJECT_ID AND i.index_id = ps.index_id
 OUTER APPLY (
 	SELECT ''Yes'' FROM sys.index_columns as ic
@@ -238,10 +238,10 @@ BEGIN /* Report Index */
 		PRINT 'Table does not have clustered index. Will provide HEAP information.' + CHAR(10) + @S;
 	ELSE
 	BEGIN
-		SET @SQL = 'SELECT ''INDEX'' as [Object Type]
-		, SCHEMA_NAME(o.schema_id) as [Schema_Name]
-		, o.Name as [Table/View Name]
-		, i.name as Index_Name
+		SET @SQL = 'SELECT [Object Type] = ''INDEX''
+		, [Schema_Name] = SCHEMA_NAME(o.schema_id)
+		, [Table/View Name] = o.Name
+		, [Index Name] = i.name
 		, i.type_desc
 		, CASE i.is_Unique WHEN 0 THEN ''No'' ELSE ''Yes'' END as Is_Unique
 		, CASE i.ignore_dup_key WHEN 0 THEN ''No'' ELSE ''Yes'' END as Ignore_Dup_Key
@@ -253,15 +253,19 @@ BEGIN /* Report Index */
 		, i.index_id
 		FROM sys.indexes as i
 		INNER JOIN sys.objects AS o on o.object_id = i.object_id
-		WHERE i.index_id = ' + CAST(@iid as VARCHAR) + ' and i.object_id = ' + CAST(@oid as VARCHAR) + '
+		WHERE i.name = ''' + @Object_Name + '''
 		OPTION (RECOMPILE);';
 		PRINT @SQL;
 		RAISERROR (@S,10,1) WITH NOWAIT
 		EXEC (@SQL);
 	
-		SET @SQL = 'SELECT c.name as Index_Column
-		, CASE ic.is_included_column WHEN 0 THEN ''No'' ELSE ''Yes'' END as Included
-		, CASE c.is_nullable WHEN 0 THEN ''No'' ELSE ''Yes'' END as Is_Nullable
+		SET @SQL = 'SELECT 
+		[Schema Name] = SCHEMA_NAME(o.schema_id)
+		, [Table/View Name] = o.Name
+		, [Index Name] = i.name
+		, [Indexed Column] = c.name
+		, Included = CASE ic.is_included_column WHEN 0 THEN ''No'' ELSE ''Yes'' END
+		, Is_Nullable = CASE c.is_nullable WHEN 0 THEN ''No'' ELSE ''Yes'' END
 		, t.name as Column_Type
 		, c.max_length
 		, c.precision
@@ -272,7 +276,9 @@ BEGIN /* Report Index */
 		INNER JOIN sys.index_columns as ic on ic.object_id = i.object_id and i.index_id = ic.index_id
 		INNER JOIN sys.columns as c on c.object_id = i.object_id and ic.column_id = c.column_id
 		INNER JOIN sys.types as t ON t.system_type_id =c.system_type_id
-		WHERE i.index_id = ' + CAST(@iid as VARCHAR) + ' and i.object_id = ' + CAST(@oid as VARCHAR) + '
+		WHERE i.name = ''' + @Object_Name + ''' 
+			OR (i.index_id = ' + CAST(@iid as VARCHAR) + ' and i.object_id = ' + CAST(@oid as VARCHAR) + ')
+		ORDER BY [Schema Name], [Table/View Name], [Index Name]
 		OPTION (RECOMPILE);';
 		PRINT @SQL;
 		RAISERROR (@S,10,1) WITH NOWAIT
@@ -287,8 +293,8 @@ BEGIN /* Report Index */
 
 	/* Report Index allocation */
 	SET @SQL = 'SELECT [Schema Name] = SCHEMA_NAME(o.[schema_id])
-	, [Table Name] = OBJECT_NAME(' + CAST(@oid as VARCHAR) + '),
-		[Table Index Name] = i.name,
+	, [Table/View Name] = OBJECT_NAME(i.object_id),
+		[Index Name] = i.name,
 		ps.index_id,
 		ps.index_level,
 		ps.index_type_desc,
@@ -308,8 +314,10 @@ BEGIN /* Report Index */
 		ps.forwarded_record_count
 	FROM sys.indexes i
 	INNER JOIN sys.objects as o ON o.object_id = i.object_id
-	CROSS APPLY sys.dm_db_index_physical_stats(DB_ID(), ' + CAST(@oid as VARCHAR) + ', ' + CAST(@iid as VARCHAR) + ', NULL, ''DETAILED'') ps
-	WHERE i.index_id = ' + CAST(@iid as VARCHAR) + ' and i.object_id = ' + CAST(@oid as VARCHAR) + '
+	OUTER APPLY sys.dm_db_index_physical_stats(' + @dbid + ', i.object_id, i.index_id, NULL, ''DETAILED'') ps
+	WHERE i.name = ''' + @Object_Name + ''' 
+			OR (i.index_id = ' + CAST(@iid as VARCHAR) + ' and i.object_id = ' + CAST(@oid as VARCHAR) + ')
+	ORDER BY [Schema Name], [Table/View Name], [Index Name]
 	OPTION (RECOMPILE);';
 	PRINT @SQL;
 	RAISERROR (@S,10,1) WITH NOWAIT
@@ -318,10 +326,12 @@ BEGIN /* Report Index */
 	IF  @V > 10
 	BEGIN
 		/* Report Index page allocation */
-		SET @SQL = 'SELECT [Database Name]=DB_NAME(),
-			[Schema Name] = SCHEMA_NAME(o.[schema_id])
-		, [Table Name] = OBJECT_NAME(i.object_id),
-			i.Index_id,
+		SET @SQL = 'SELECT TOP 1000
+		[Database Name] = DB_NAME()
+			, [Schema Name] = SCHEMA_NAME(o.[schema_id])
+			, [Table/View Name] = OBJECT_NAME(i.object_id)
+			, [Index Name] = i.name
+			, i.Index_id,
 			a.allocation_unit_type,
 			a.allocation_unit_type_desc,
 			a.allocated_page_iam_file_id,
@@ -339,9 +349,10 @@ BEGIN /* Report Index */
 			a.is_page_compressed
 		FROM sys.indexes AS i
 		INNER JOIN sys.objects as o ON o.object_id = i.object_id
-		CROSS APPLY sys.dm_db_database_page_allocations(DB_ID(),' + CAST(@oid as VARCHAR) + ', ' + CAST(@iid as VARCHAR) + ', NULL, ''DETAILED'') a
-		WHERE i.index_id = ' + CAST(@iid as VARCHAR) + ' and i.object_id = ' + CAST(@oid as VARCHAR) + '
-		ORDER BY a.page_level DESC, a.previous_page_page_id, a.extent_page_id, a.allocated_page_page_id
+		OUTER APPLY sys.dm_db_database_page_allocations(' + @dbid + ',i.object_id, i.index_id, NULL, ''DETAILED'') a
+		WHERE i.name = ''' + @Object_Name + ''' 
+			OR (i.index_id = ' + CAST(@iid as VARCHAR) + ' and i.object_id = ' + CAST(@oid as VARCHAR) + ')
+		ORDER BY [Schema Name], [Table/View Name], [Index Name], a.page_level DESC, a.previous_page_page_id, a.extent_page_id, a.allocated_page_page_id
 		OPTION (RECOMPILE);';
 		PRINT @SQL;
 		RAISERROR (@S,10,1) WITH NOWAIT

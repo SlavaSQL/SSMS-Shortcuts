@@ -1,3 +1,4 @@
+2020-01-21	Ctrl-4  Fixed report for duplicated indexes; Replaced DB_ID() call and CROSS APPLYs; Limited dm_db_database_page_allocations by TOP 1000.
 2020-01-21	Ctrl-F1 Fixed join for a single table. 
 2020-01-21	Ctrl-4  Added index alloc_unit_type_desc. 
 2019-12-20	Ctrl-4  Added schema names for objects and indexes. 
