@@ -1,4 +1,4 @@
-/* Ctrl-F1 - 2020-01-21 List Tables
+/* Ctrl-F1 - 2020-02-18 List Tables
 Consolidated by Slava Murygin
 http://slavasql.blogspot.com/2016/02/ssms-query-shortcuts.html */
 IF OBJECT_ID('tempdb..#USP_GETSTAT') IS NOT NULL
@@ -294,15 +294,15 @@ BEGIN
 			WHEN n.Gain_Percentage > r.Gain_Percentage AND n.Gain_Percentage > p.Gain_Percentage
 					AND ps.data_compression_desc != 'NONE'
 				THEN CASE WHEN n.index_id > 1 THEN 'ALTER INDEX [' + i.name + '] ON ' ELSE 'ALTER TABLE ' END +
-					'[' + n.Table_Schema + '].[' + n.Table_Name + '] REBUILD PARTITION = ALL WITH (DATA_COMPRESSION = NONE)'
+					'[' + n.Table_Schema collate catalog_default + '].[' + n.Table_Name collate catalog_default + '] REBUILD PARTITION = ALL WITH (DATA_COMPRESSION = NONE)'
 			WHEN r.Gain_Percentage > n.Gain_Percentage AND r.Gain_Percentage > p.Gain_Percentage
 					AND ps.data_compression_desc != 'ROW'
 				THEN  CASE WHEN n.index_id > 1 THEN 'ALTER INDEX [' + i.name + '] ON ' ELSE 'ALTER TABLE ' END +
-					'[' + n.Table_Schema + '].[' + n.Table_Name + '] REBUILD PARTITION = ALL WITH (DATA_COMPRESSION = ROW)'
+					'[' + n.Table_Schema collate catalog_default + '].[' + n.Table_Name collate catalog_default + '] REBUILD PARTITION = ALL WITH (DATA_COMPRESSION = ROW)'
 			WHEN p.Gain_Percentage > n.Gain_Percentage AND p.Gain_Percentage > r.Gain_Percentage
 					AND ps.data_compression_desc != 'PAGE'
 				THEN  CASE WHEN n.index_id > 1 THEN 'ALTER INDEX [' + i.name + '] ON ' ELSE 'ALTER TABLE ' END +
-					'[' + n.Table_Schema + '].[' + n.Table_Name + '] REBUILD PARTITION = ALL WITH (DATA_COMPRESSION = PAGE)'
+					'[' + n.Table_Schema collate catalog_default + '].[' + n.Table_Name collate catalog_default + '] REBUILD PARTITION = ALL WITH (DATA_COMPRESSION = PAGE)'
 			ELSE '/* No changes determined */' END
 		, [Current Size] = CAST(CAST(n.[size_with_current_compression_setting(KB)] / 1024. as DECIMAL(38,3)) as VARCHAR) + ' Mb'
 		, [Gain for "NONE"] = CAST(CAST(n.[size_with_current_compression_setting(KB)] * n.Gain_Percentage / 102400. as DECIMAL(38,3)) as VARCHAR) + ' Mb'
@@ -317,7 +317,9 @@ BEGIN
 	INNER JOIN #Compression_results as p ON n.index_id = p.index_id AND n.TableId = p.TableId AND n.partition_number = p.partition_number
 	INNER JOIN sys.partitions AS ps with (NOLOCK) ON ps.object_id = n.TableId AND i.index_id = ps.index_id
 		AND n.partition_number = ps.partition_number
-	WHERE n.Compression_Type = 'NONE' AND r.Compression_Type = 'ROW' AND p.Compression_Type = 'PAGE'
+	WHERE n.Compression_Type collate catalog_default = 'NONE' 
+		AND r.Compression_Type collate catalog_default = 'ROW' 
+		AND p.Compression_Type collate catalog_default = 'PAGE'
 	ORDER BY [Table Name], [Index Name], [Partition];
 END
 
