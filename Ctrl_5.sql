@@ -1,4 +1,4 @@
-/*5 - 2019-12-20 DB Info
+/* 5 - 2020-02-20 DB Info
 Consolidated by Slava Murygin
 http://slavasql.blogspot.com/2016/02/ssms-query-shortcuts.html */
 
@@ -158,14 +158,14 @@ PRINT '4. Availability Group name: AG Info.'
 
 DECLARE @S CHAR(80), @V INT; --SQL Server Major Version
 DECLARE @SQL NVARCHAR(MAX), @SQL1 NVARCHAR(MAX), @SQL2 NVARCHAR(MAX);
-DECLARE @ag_present INT, @nl NVARCHAR(MAX), @or NCHAR(18), @ny NCHAR(36), @oo NCHAR(36);
+DECLARE @ag_present INT, @nl NVARCHAR(MAX), @or NCHAR(18), @ny NCHAR(50), @oo NCHAR(36);
 DECLARE @P NCHAR(1), @CompLevel INT, @DBid INT;
 
 SELECT @V=CAST(CAST(SERVERPROPERTY('ProductVersion') as CHAR(2)) as NUMERIC)
 	, @S=REPLICATE('-',80), @ag_present = 0, @nl = ' with (NOLOCK) '
 	, @CompLevel=compatibility_level, @P  = NULL
 	, @or='OPTION (RECOMPILE)'
-	, @ny=' WHEN 0 THEN ''NO'' ELSE ''YES'' END'
+	, @ny=' WHEN 0 THEN ''NO'' WHEN 1 THEN ''YES'' ELSE ''N/A'' END'
 	, @oo=' WHEN 0 THEN ''OFF'' ELSE ''ON'' END'
 	, @DBid=CASE WHEN @Param is Null THEN 0
 		WHEN DB_ID(@Param) Is Null THEN -1 ELSE DB_ID(@Param) END
@@ -272,10 +272,10 @@ OPTION (QUERYTRACEON 9481, RECOMPILE)
 END
 
 IF @ag_present = 1 and @DBid = -1 and @V >= 11 /*Double If to prevent error in SQL2008*/
-IF (EXISTS (SELECT TOP 1 1 FROM sys.availability_groups WHERE name = @Param) OR ASCII(@P) = 65) 
+IF (EXISTS (SELECT TOP 1 1 FROM sys.availability_groups WHERE name = @Param) OR ASCII(@P) = 65)
 BEGIN
 	/* Return info for individual AG*/
-	SET @SQL = 'SELECT [AG Name], replica_server_name, [Replica Owner], [DB_Name]
+	SET @SQL = 'SELECT [Node], [AG Name], replica_server_name, [Replica Owner], [DB_Name]
 , last_commit_time, Position, is_local, [Status], [State], [Join State]
 , availability_mode_desc, failover_mode_desc
 , session_timeout, [Is Readable], create_date, modify_date, backup_priority
@@ -478,7 +478,7 @@ SELECT [Database ID]=t.database_id
 ,[File Name]=mf.name
 ,[Physical Name]=mf.physical_name
 ,[File Type]=mf.type_desc
-,[VLF Count]=IsNull(CASE WHEN mf.type_desc = ''LOG'' THEN CAST(v.VLFCount as VARCHAR) 
+,[VLF Count]=IsNull(CASE WHEN mf.type_desc = ''LOG'' THEN CAST(v.VLFCount as VARCHAR)
 	WHEN t.database_id = 2 THEN ''Org.Size: '' + CAST(mf.size/128 as VARCHAR) + ''Mb''
 	ELSE '''' END,-1)
 ,[File Size, MB]=IsNull(t.SizeMB, CASE WHEN mf.size/128. > = 1000000 THEN CAST(mf.size/128000000 as VARCHAR) + '','' ELSE '''' END
