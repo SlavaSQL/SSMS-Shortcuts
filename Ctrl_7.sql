@@ -155,7 +155,7 @@ IsNumeric(@Param)=1 AND	EXISTS (SELECT TOP 1 1 FROM sys.[dm_exec_connections] WH
 BEGIN -- Reports all sessions for provided IP Address or '<local machine>'
 SET @SQL=@SQL+N'
 WHERE cn.client_net_address='''+@Param+'''
-ORDER BY s.endpoint_id,cn.session_id'+@or;
+ORDER BY cn.session_id'+@or;
 GOTO RET;
 END
 ELSE IF @SP in ('B','L','D','F','O')
