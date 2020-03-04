@@ -1,3 +1,5 @@
+2020-03-04	Ctrl-7	Fixed Duplicates due to multiple use of resources by adding "DISTINCT".
+2020-03-02	Ctrl-9  Fixed Changed Row counts to Bigint.
 2020-02-20	Ctrl-5	Added "Node" column for AGs. Added 'N/A' state for some "Yes"/"No" columns.
 2020-02-18	Ctrl-F1	Fixed another collation error.
 2020-01-21	Ctrl-4  Fixed report for duplicated indexes; Replaced DB_ID() call and CROSS APPLYs; Limited dm_db_database_page_allocations by TOP 1000.

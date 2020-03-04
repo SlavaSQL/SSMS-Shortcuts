@@ -1,4 +1,4 @@
-/* 9 - 2019-06-11 Statistics' Information
+/* 9 - 2020-03-02 Statistics' Information
 Consolidated by Slava Murygin
 http://slavasql.blogspot.com/2016/02/ssms-query-shortcuts.html */
 
@@ -7,8 +7,8 @@ IF OBJECT_ID('tempdb..#tbl_Statistic_Histogram') IS NOT NULL
 GO
 CREATE TABLE #tbl_Statistic_Histogram(
 	[RANGE_HI_KEY] SQL_VARIANT
-,	[RANGE_ROWS] INT
-,	[EQ_ROWS] INT
+,	[RANGE_ROWS] BIGINT
+,	[EQ_ROWS] BIGINT
 ,	[DISTINCT_RANGE_ROWS]  INT
 ,	[AVG_RANGE_ROWS] NUMERIC
 ,	[TOTAL_ROWS] AS [RANGE_ROWS] + [EQ_ROWS]

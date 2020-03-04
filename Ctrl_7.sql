@@ -1,4 +1,4 @@
-/* 7 - 2019-12-04 Connections' & Agent Information
+/* 7 - 2020-03-04 Connections' & Agent Information
 Consolidated by Slava Murygin
 http://slavasql.blogspot.com/2016/02/ssms-query-shortcuts.html */
 USE tempdb
@@ -56,7 +56,7 @@ Job name - Information about of selected job, including steps and schedules.
 * mailitem_id - Returns individual email settings/log with email body
 '+@S;
 
-SET @SQL =N'SELECT cn.session_id,
+SET @SQL =N'SELECT DISTINCT cn.session_id,
 r.blocking_session_id,
 CASE WHEN p.name=''Dedicated Admin Connection'' THEN ''YES'' ELSE ''NO'' END as DAC,
 cn.local_tcp_port,
@@ -100,7 +100,7 @@ IF @Param Is Null
 BEGIN
 SET @SQL=@SQL+N'
 WHERE cn.[most_recent_session_id]!=@@spid and s.is_user_process=1
-ORDER BY s.endpoint_id,cn.session_id'+@or;
+ORDER BY cn.session_id'+@or;
 PRINT @SQL;RAISERROR (@S,10,1) WITH NOWAIT;EXEC(@SQL);
 
 SET @SQL=N';WITH CPU as (SELECT CAST(cpu_count/hyperthread_ratio'+@vc+' as cpu FROM sys.dm_os_sys_info),
