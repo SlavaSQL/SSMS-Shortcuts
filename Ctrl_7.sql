@@ -1,6 +1,7 @@
 /* 7 - 2020-09-30 Connections' & Agent Information
 Consolidated by Slava Murygin
 http://slavasql.blogspot.com/2016/02/ssms-query-shortcuts.html */
+-- Fixed duration timing
 USE tempdb
 GO
 IF OBJECT_ID('tempdb..#USP_GET7') IS NOT NULL
