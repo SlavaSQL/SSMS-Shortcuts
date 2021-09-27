@@ -1,7 +1,6 @@
-/* 7 - 2020-09-30 Connections' & Agent Information
+/* 7 - 2020-03-04 Connections' & Agent Information
 Consolidated by Slava Murygin
 http://slavasql.blogspot.com/2016/02/ssms-query-shortcuts.html */
--- Fixed duration timing
 USE tempdb
 GO
 IF OBJECT_ID('tempdb..#USP_GET7') IS NOT NULL
@@ -92,8 +91,10 @@ WHEN 2 THEN ''Retry'' WHEN 3 THEN ''Canceled'' ELSE ''N/A'' END
 RIGHT(''00''+CAST(h.run_time/10000'+@vc+',2)+'':'' +
 RIGHT(''00''+CAST(h.run_time/100 - (h.run_time/10000)*100'+@vc+',2)+'':''+
 RIGHT(''00''+CAST(h.run_time'+@vc+',2)
-,[Duration]=CAST(CAST(LEFT(Dur,4) as INT)'+@vc+'+'':''+SUBSTRING(Dur,5,2)+'':''+RIGHT(Dur,2)
-,[Duration,Sec]=(h.run_duration/10000)*3600+(h.run_duration/100)*60+h.run_duration%100';
+,[Duration]=RIGHT(''00''+CAST(h.run_duration/3600'+@vc+',2)+'':''+
+RIGHT(''0''+CAST((h.run_duration % 3600) / 60'+@vc+',2)+'':''+
+RIGHT(''0''+CAST(h.run_duration % 60'+@vc+',2)
+,[Duration,Sec]=h.run_duration';
 
 IF @Param Is Null
 BEGIN
@@ -325,7 +326,7 @@ SET @SQL=N'SELECT [Job Name]=j.name
 FROM msdb..sysjobs j'+@nl+'
 OUTER APPLY (SELECT MAX(a.next_scheduled_run_date) as Next_Run FROM msdb..sysjobactivity as a'+@nl+'WHERE j.job_id=a.job_id) as a
 OUTER APPLY (SELECT MAX(instance_id) FROM msdb..sysjobhistory as m'+@nl+' WHERE j.job_id=m.job_id and m.step_id=0) as x(instance_id)
-LEFT JOIN (SELECT *,Dur=RIGHT(''0000000''+CAST(run_duration'+@vc+',8) FROM msdb..sysjobhistory '+@nl+') h ON j.job_id=h.job_id and h.instance_id=x.instance_id
+LEFT JOIN msdb..sysjobhistory as h'+@nl+'ON j.job_id=h.job_id and h.instance_id=x.instance_id
 OUTER APPLY ( SELECT COUNT(*) FROM msdb..sysjobsteps as s'+@nl+' WHERE j.job_id=s.job_id) as s([Job Steps])
 OUTER APPLY (SELECT IsNull(l.log,'''')+'''' FROM msdb..sysjobsteps as s'+@nl+'
 	LEFT JOIN msdb..sysjobstepslogs as l'+@nl+'ON l.step_uid=s.step_uid WHERE s.job_id=j.job_id FOR XML PATH('''') ) as l(msg)
@@ -555,7 +556,7 @@ SELECT h.step_id
 IsNull(o1.name,''None'')+''/'' +
 IsNull(o2.name,''None'')+''/'' +
 IsNull(o3.name,''None'')
-FROM msdb..sysjobs j'+@nl+@ij+'(SELECT *,Dur=RIGHT(''0000000''+CAST(run_duration'+@vc+',8) FROM msdb..sysjobhistory '+@nl+') h ON j.job_id=h.job_id
+FROM msdb..sysjobs j'+@nl+@ij+'msdb..sysjobhistory h'+@nl+'ON j.job_id=h.job_id
 INNER JOIN (SELECT m,job_id,instance_id FROM Rec WHERE ID=(SELECT MAX(id) FROM Rep)) msg
 ON msg.job_id=h.job_id AND msg.instance_id=h.instance_id
 OUTER APPLY (SELECT inst_id=MAX(i.instance_id) FROM msdb..sysjobhistory i'+@nl+'WHERE j.job_id=i.job_id) e
@@ -674,27 +675,25 @@ SELECT j.name,run_time,run_duration,h.run_date,j.job_id,h.run_status
 ,DATEDIFF(Day,CONVERT(Date,CONVERT(CHAR(10),run_date,121)),GetDate()) as Run_Day
 ,SH=run_time/10000,SM=(run_time % 10000) / 100,SS=run_time % 100
 ,DH=run_duration/3600,DM=(run_duration % 3600)/60,DS=run_duration % 60
-,Dur=RIGHT(''0000000''+CAST(run_duration'+@vc+',8)
-,DurS=(run_duration/10000)*3600+(run_duration/100)*60+run_duration%100
 FROM msdb..sysjobs as j'+@nl+@ij+'msdb..sysjobhistory as h'+@nl+'ON j.job_id=h.job_id
 WHERE h.step_id=0
 ),DataPoints as (
-SELECT job_id,run_time,run_duration,run_date,run_status,DurS
+SELECT job_id,run_time,run_duration,run_date,run_status
 ,x_dur=DH+(DM*60+DS)/3600.
 ,y=(DENSE_RANK() OVER (ORDER BY name DESC) - 1)
 ,x=SH+(SM*60+SS)/3600.+CASE WHEN @View=2 and Run_Day=0 THEN 24 ELSE 0 END
-,Start_Time=RIGHT(''0''+CAST(SH'+@vc+',2)+'':''+RIGHT(''0''+CAST(SM'+@vc+',2)+'':''+RIGHT(''0''+CAST(SS'+@vc+',2)
-,Duration=CAST(CAST(LEFT(Dur,4) as INT)'+@vc+'+'':''+SUBSTRING(Dur,5,2)+'':''+RIGHT(Dur,2)
+,RIGHT(''0''+CAST(SH'+@vc+',2)+'':''+RIGHT(''0''+CAST(SM'+@vc+',2)+'':''+RIGHT(''0''+CAST(SS'+@vc+',2) as Start_Time
+,RIGHT(''0''+CAST(DH'+@vc+',2)+'':''+RIGHT(''0''+CAST(DM'+@vc+',2)+'':''+RIGHT(''0''+CAST(DS'+@vc+',2) as Duration
 FROM Job_Hist
 WHERE run_duration>0 and Run_Day=@View
 ),History_Aggregate as (
 SELECT job_id,name
 ,[Earliest recorded date]=CONVERT(CHAR(19),MIN(TS),121)
 ,[Recorded runs]=COUNT(*)
-,[Total Duration]=CAST(SUM(DurS)/3600'+@vc+'+'':''
-+RIGHT(''0''+CAST((SUM(DurS) % 3600)/60'+@vc+',2)+'':''
-+RIGHT(''0''+CAST(SUM(DurS)%60'+@vc+',2)
-,[Total Duration,Sec]=SUM(DurS)
+,[Total Duration]=CAST(SUM(run_duration) / 3600'+@vc+'+'':''
++RIGHT(''0''+CAST( (SUM(run_duration) % 3600) / 60'+@vc+',2)+'':''
++RIGHT(''0''+CAST( SUM(run_duration) % 60'+@vc+',2)
+,[Total Duration,Sec]=SUM(run_duration)
 FROM Job_Hist h
 GROUP BY job_id,name
 )
@@ -708,7 +707,7 @@ WHEN 2 THEN ''Retry''
 WHEN 3 THEN ''Canceled''
 ELSE ''N/A'' END
 ,d.Duration
-,[Duration,Sec]=d.DurS
+,[Duration,Sec]=d.run_duration
 ,[Earliest recorded date]
 ,[Recorded runs]
 ,[Total Duration]
