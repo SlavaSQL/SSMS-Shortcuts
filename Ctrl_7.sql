@@ -1,4 +1,4 @@
-/* 7 - 2020-03-04 Connections' & Agent Information
+/* 7 - 2022-01-04 Connections' & Agent Information
 Consolidated by Slava Murygin
 http://slavasql.blogspot.com/2016/02/ssms-query-shortcuts.html */
 USE tempdb
@@ -16,13 +16,15 @@ CREATE PROCEDURE #USP_GET7
 @Param varchar(1000)=NULL
 AS
 DECLARE @S CHAR(80),@Where NVARCHAR(1000),@SQL NVARCHAR(4000),@V INT,@H INT,@nocount_off BIT,@SP CHAR(1);
-DECLARE @or NCHAR(20),@nl NCHAR(15),@nv NCHAR(19),@yn NCHAR(38),@ij NCHAR(15),@vc NCHAR(18),@R1 NVARCHAR(1000);
+DECLARE @or NCHAR(20),@nl NCHAR(15),@nv NCHAR(19),@yn NCHAR(38),@lj NCHAR(10),@ij NCHAR(15),@vc NCHAR(18),@R1 NVARCHAR(999),@sjh NVARCHAR(999);
 
 SELECT @V=CAST(CAST(SERVERPROPERTY('ProductVersion') as CHAR(2)) as NUMERIC)
 ,@S=REPLICATE('-',80),@or=N' OPTION (RECOMPILE);',@nl=N' WITH (NOLOCK) '
 ,@nv=' as NVARCHAR(4000))',@yn=' WHEN 1 THEN ''Yes'' ELSE ''No'' END '
-,@ij='INNER JOIN ',@vc=' as VARCHAR(1000))'
-,@H=-1,@nocount_off=CASE @@OPTIONS & 512 WHEN 0 THEN 1 ELSE 0 END;
+,@lj='LEFT JOIN ',@ij='INNER JOIN ',@vc=' as VARCHAR(1000))'
+,@H=-1,@nocount_off=CASE @@OPTIONS & 512 WHEN 0 THEN 1 ELSE 0 END
+,@sjh='SELECT 
+iid=instance_id,rd=run_duration,rt=run_time,rs=run_status,rdt=run_date,m=message,step_id,sn=step_name,o1=operator_id_emailed,o2=operator_id_netsent,o3=operator_id_paged FROM msdb..sysjobhistory as hi'+@nl+'WHERE j.job_id=hi.job_id';
 
 SET NOCOUNT ON
 
@@ -58,15 +60,15 @@ Job name - Information about of selected job, including steps and schedules.
 
 SET @SQL =N'SELECT DISTINCT cn.session_id,
 r.blocking_session_id,
-CASE WHEN p.name=''Dedicated Admin Connection'' THEN ''YES'' ELSE ''NO'' END as DAC,
+DAC=CASE WHEN p.name=''Dedicated Admin Connection'' THEN ''YES'' ELSE ''NO'' END,
 cn.local_tcp_port,
-DB_NAME(t.dbid) as DB_Name,
+DB_Name=DB_NAME(t.dbid),
 r.command,
 r.percent_complete,
 s.login_name,
 s.host_name,
 cn.client_net_address,
-p.name AS [Endpoint],
+[Endpoint]=p.name,
 s.program_name,
 t.text,
 cn.num_reads,
@@ -80,21 +82,21 @@ internal_objects_dealloc_page_count
 FROM sys.[dm_exec_connections] as cn'+@nl+@ij+'
 sys.dm_exec_sessions as s'+@nl+'on cn.session_id=s.session_id
 '+@ij+'sys.endpoints as p'+@nl+'ON p.endpoint_id=s.endpoint_id
-LEFT JOIN sys.dm_exec_requests as r'+@nl+'on cn.session_id=r.session_id
+'+@lj+'sys.dm_exec_requests as r'+@nl+'on cn.session_id=r.session_id
 CROSS APPLY sys.dm_exec_sql_text(cn.[most_recent_sql_handle]) AS t
 /* Temp DB Usage */
 '+@ij+'sys.dm_db_task_space_usage as u'+@nl+'ON u.session_id=cn.session_id';
 
-SET @R1='=CASE h.run_status WHEN 0 THEN ''Failed'' WHEN 1 THEN ''Succeeded''
+SET @R1='=CASE h.rs WHEN 0 THEN ''Failed'' WHEN 1 THEN ''Succeeded''
 WHEN 2 THEN ''Retry'' WHEN 3 THEN ''Canceled'' ELSE ''N/A'' END
-,[Last Run Date/Time]=CAST(CAST(CAST(h.run_date as char(8)) as date)'+@vc+'+'' ''+
-RIGHT(''00''+CAST(h.run_time/10000'+@vc+',2)+'':'' +
-RIGHT(''00''+CAST(h.run_time/100 - (h.run_time/10000)*100'+@vc+',2)+'':''+
-RIGHT(''00''+CAST(h.run_time'+@vc+',2)
-,[Duration]=RIGHT(''00''+CAST(h.run_duration/3600'+@vc+',2)+'':''+
-RIGHT(''0''+CAST((h.run_duration % 3600) / 60'+@vc+',2)+'':''+
-RIGHT(''0''+CAST(h.run_duration % 60'+@vc+',2)
-,[Duration,Sec]=h.run_duration';
+,[Last Run Date/Time]=CAST(CAST(CAST(h.rdt as char(8)) as date)'+@vc+'+'' ''+
+RIGHT(''00''+CAST(h.rt/10000'+@vc+',2)+'':'' +
+RIGHT(''00''+CAST(h.rt/100-(h.rt/10000)*100'+@vc+',2)+'':''+
+RIGHT(''00''+CAST(h.rt'+@vc+',2)
+,[Duration]=RIGHT(''00''+CAST(h.rd/10000'+@vc+',2)+'':'' +
+RIGHT(''00''+CAST(h.rd/100 -(h.rd/10000)*100'+@vc+',2)+'':''+
+RIGHT(''00''+CAST(h.rd'+@vc+',2)
+,[Duration,Sec]=h.rd/10000*3600+h.rd%10000/100*60+h.rd%100';
 
 IF @Param Is Null
 BEGIN
@@ -114,18 +116,18 @@ WHEN cpu<65 THEN 738*a
 WHEN cpu<129 THEN 3968+256*a
 WHEN cpu<257 THEN 8064+256*a
 ELSE -1 END FROM CPU,Architecture)
-SELECT name as [TCP Endpoint]
+SELECT [TCP Endpoint]=name
 ,endpoint_id
 ,[Allowed]=IsNull(c.value_in_use,@@MAX_CONNECTIONS)
 ,[Current Threads]=CASE endpoint_id WHEN 1 THEN c.value_in_use ELSE (SELECT COUNT(*) FROM sys.dm_os_threads) END
 ,[Max Threads]=CASE endpoint_id WHEN 1 THEN 0 ELSE (
 SELECT CASE WHEN value_in_use=0 or value_in_use>mt THEN mt ELSE value_in_use END FROM sys.configurations,MaxThreads WHERE name =''max worker threads'') END
-,protocol_desc as [Protocol]
-,type_desc as [Type]
-,state_desc as [State]
+,[Protocol]=protocol_desc
+,[Type]=type_desc
+,[State]=state_desc
 ,port
-,CASE is_dynamic_port'+@yn+'as [Is Dynamic]
-,IsNull(ip_address,''Not set'') as [IP Address]
+,[Is Dynamic]=CASE is_dynamic_port'+@yn+'
+,[IP Address]=IsNull(ip_address,''Not set'')
 FROM sys.tcp_endpoints as e'+@nl+'
 OUTER APPLY (SELECT value_in_use FROM master.sys.configurations	
 WHERE e.endpoint_id=1 and name=''remote admin connections''
@@ -136,8 +138,8 @@ IF @V >=11
 BEGIN
 SET @SQL=N'SELECT ip_address,port,
 CASE is_ipv4'+@yn+'as [Is IPv4],
-type_desc as [Listener Type],
-state_desc as [State],
+[Listener Type]=type_desc,
+[State]=state_desc,
 start_time
 FROM sys.dm_tcp_listener_states as ls'+@nl+'
 ORDER BY ls.listener_id'+@or;
@@ -189,20 +191,20 @@ ELSE 'WHERE B.type='''+REPLACE(REPLACE(@Param,'D','I'),'F','D')+'''' END;
 ELSE
 SET @Where='WHERE B.dbn='''+@Param COLLATE database_default+'''';
 	
-SET @SQL=N';WITH B as (SELECT s.database_name as dbn,s.type
-,s.backup_start_date as sd,s.backup_finish_date as fd
-,DATEDIFF(second,s.backup_start_date,s.backup_finish_date) as bt
-,s.recovery_model as [Model]
+SET @SQL=N';WITH B as (SELECT dbn=s.database_name,s.type
+,sd=s.backup_start_date,fd=s.backup_finish_date
+,bt=DATEDIFF(second,s.backup_start_date,s.backup_finish_date)
+,[Model]=s.recovery_model
 ,fsm=CAST(CAST(ROUND(IsNull(s.compressed_backup_size,s.backup_size)/1048576.,3) as DECIMAL(13,3)) as VARCHAR(16))
-,IsNull(s.compressed_backup_size,s.backup_size)/1048576. as fs
+,fs=IsNull(s.compressed_backup_size,s.backup_size)/1048576.
 ,m.[FileName],m.IsExist,Number_of_Backups
-,s.name+IsNull('' ''+s.description,'''') as bn
-,CASE s.recovery_model WHEN ''FULL'' THEN CASE WHEN last_log_backup_lsn is Null THEN ''Broken'' ELSE ''OK'' END
-	ELSE ''N/A'' END as [Chain]
+,bn=s.name+IsNull('' ''+s.description,'''')
+,[Chain]=CASE s.recovery_model WHEN ''FULL'' THEN CASE WHEN last_log_backup_lsn is Null THEN ''Broken'' ELSE ''OK'' END
+	ELSE ''N/A'' END as 
 FROM msdb..backupset as s'+@nl+@ij+'#media_set as m ON s.media_set_id=m.media_set_id
-LEFT JOIN master.sys.database_recovery_status as r'+@nl+'ON DB_NAME(r.database_id)=s.database_name
+'+@lj+'master.sys.database_recovery_status as r'+@nl+'ON DB_NAME(r.database_id)=s.database_name
 )
-SELECT dbn as [Database name],B.[Model]
+SELECT [Database name]=dbn,B.[Model]
 ,[Backup Type]=CASE B.type
 WHEN ''D'' THEN ''Full Database''
 WHEN ''I'' THEN ''Differential''
@@ -228,7 +230,7 @@ ELSE LEFT(B.fsm,LEN(B.fsm)-7)+'',''+RIGHT(B.fsm,7) END ELSE B.fsm END,13)
 ,[Backup file name]=B.[FileName]
 ,[Backups in File]=B.Number_of_Backups
 ,[Backup file exists]=CASE B.[IsExist] WHEN 1 THEN ''Yes'' WHEN 0 THEN ''No'' ELSE ''Over historical limit'' END
-,B.bn as [Backup Name/Description]
+,[Backup Name/Description]=B.bn
 FROM B '+@Where+' ORDER BY B.sd DESC'+@or;
 GOTO RET;
 END
@@ -308,7 +310,7 @@ SET @SQL=N'SELECT [Mail Profile name]=p.name
 FROM msdb..[sysmail_profileaccount] as pa
 RIGHT JOIN msdb..[sysmail_profile] as p ON p.profile_id=pa.profile_id
 RIGHT JOIN msdb..[sysmail_account] as a ON a.account_id=pa.account_id
-LEFT JOIN msdb..[sysmail_server] as s ON a.account_id=s.account_id'+@or;
+'+@lj+'msdb..[sysmail_server] as s ON a.account_id=s.account_id'+@or;
 GOTO RET;
 END
 END
@@ -322,15 +324,16 @@ SET @SQL=N'SELECT [Job Name]=j.name
 ,[Last Modification Date]=j.date_modified
 ,[Job Description]=j.description
 ,[Last Run]'+@R1+'
-,[Last Message]=CAST(IsNull(h.message,'''') as NVARCHAR(MAX))+REPLACE(REPLACE(REPLACE(l.msg,''&#x0D;'',''|''),''&gt;&gt;&gt;'',''>''),''&lt;&lt;&lt;'',''<'')
+,[Last Message]=CAST(IsNull(h.m,'''') as NVARCHAR(MAX))+REPLACE(REPLACE(REPLACE(l.msg,''&#x0D;'',''|''),''&gt;&gt;&gt;'',''>''),''&lt;&lt;&lt;'',''<'')
 FROM msdb..sysjobs j'+@nl+'
 OUTER APPLY (SELECT MAX(a.next_scheduled_run_date) as Next_Run FROM msdb..sysjobactivity as a'+@nl+'WHERE j.job_id=a.job_id) as a
 OUTER APPLY (SELECT MAX(instance_id) FROM msdb..sysjobhistory as m'+@nl+' WHERE j.job_id=m.job_id and m.step_id=0) as x(instance_id)
-LEFT JOIN msdb..sysjobhistory as h'+@nl+'ON j.job_id=h.job_id and h.instance_id=x.instance_id
+OUTER APPLY ( '+@sjh+' and hi.instance_id=x.instance_id) as h
 OUTER APPLY ( SELECT COUNT(*) FROM msdb..sysjobsteps as s'+@nl+' WHERE j.job_id=s.job_id) as s([Job Steps])
 OUTER APPLY (SELECT IsNull(l.log,'''')+'''' FROM msdb..sysjobsteps as s'+@nl+'
-	LEFT JOIN msdb..sysjobstepslogs as l'+@nl+'ON l.step_uid=s.step_uid WHERE s.job_id=j.job_id FOR XML PATH('''') ) as l(msg)
+	'+@lj+'msdb..sysjobstepslogs as l'+@nl+'ON l.step_uid=s.step_uid WHERE s.job_id=j.job_id FOR XML PATH('''') ) as l(msg)
 ORDER BY j.name'+@or;
+
 PRINT @SQL;RAISERROR (@S,10,1) WITH NOWAIT;EXEC (@SQL);
 SET @H=0;
 END
@@ -363,9 +366,9 @@ WHEN 3 THEN ''Retrying'' ELSE ''Failed'' END
 ,[Send account]=a.name
 ,m.last_mod_date,m.last_mod_user
 FROM msdb..sysmail_mailitems as m
-LEFT JOIN msdb..[sysmail_profile] l ON m.profile_id=l.profile_id
-LEFT JOIN msdb..[sysmail_account] a ON a.account_id=m.sent_account_id
-LEFT JOIN msdb..sysmail_event_log e ON e.mailitem_id=m.mailitem_id
+'+@lj+'msdb..[sysmail_profile] l ON m.profile_id=l.profile_id
+'+@lj+'msdb..[sysmail_account] a ON a.account_id=m.sent_account_id
+'+@lj+'msdb..sysmail_event_log e ON e.mailitem_id=m.mailitem_id
 	and (e.event_type IS NULL OR e.event_type !=''information'')
 ORDER BY send_request_date DESC'+@or;
 GOTO RET;
@@ -397,15 +400,15 @@ SELECT [Job name]=CAST(j.name'+@nv+'
 ,[Operator pager]=CAST(o3.pager_address'+@nv+'
 ,[Delete Job]=CAST(n5.[Value]'+@nv+'
 ,[Job version #]=CAST(j.version_number'+@nv+'
-FROM msdb..sysjobs j'+@nl+'LEFT JOIN master.sys.server_principals p'+@nl+'ON j.owner_sid=p.sid
+FROM msdb..sysjobs j'+@nl+''+@lj+'master.sys.server_principals p'+@nl+'ON j.owner_sid=p.sid
 '+@ij+'Notify n1 ON n1.id=j.notify_level_eventlog
 '+@ij+'Notify n2 ON n2.id=j.notify_level_email
 '+@ij+'Notify n3 ON n3.id=j.notify_level_netsend
 '+@ij+'Notify n4 ON n4.id=j.notify_level_page
 '+@ij+'Notify n5 ON n5.id=j.delete_level
-LEFT JOIN msdb..sysoperators o1'+@nl+'ON o1.id=j.notify_email_operator_id
-LEFT JOIN msdb..sysoperators o2'+@nl+'ON o2.id=j.notify_netsend_operator_id
-LEFT JOIN msdb..sysoperators o3'+@nl+'ON o3.id=j.notify_page_operator_id
+'+@lj+'msdb..sysoperators o1'+@nl+'ON o1.id=j.notify_email_operator_id
+'+@lj+'msdb..sysoperators o2'+@nl+'ON o2.id=j.notify_netsend_operator_id
+'+@lj+'msdb..sysoperators o3'+@nl+'ON o3.id=j.notify_page_operator_id
 OUTER APPLY ( SELECT COUNT(*) FROM msdb..sysjobsteps s'+@nl+'
 WHERE j.job_id=s.job_id) s([Job Steps])
 WHERE j.name='''+@Param COLLATE database_default+N'''
@@ -454,7 +457,7 @@ RIGHT(''00''+CAST(s.last_run_time'+@vc+',2) END
 ,s.output_file_name
 ,s.proxy_id
 FROM msdb..sysjobsteps s'+@nl+@ij+'msdb..sysjobs j'+@nl+'on j.job_id=s.job_id
-LEFT JOIN msdb..sysjobstepslogs l WITH (NOLOCK) ON l.step_uid=s.step_uid
+'+@lj+'msdb..sysjobstepslogs l WITH (NOLOCK) ON l.step_uid=s.step_uid
 WHERE j.name='''+@Param COLLATE database_default+N''''+@or;
 PRINT @SQL;RAISERROR (@S,10,1) WITH NOWAIT;EXEC (@SQL);
 /*Job schedules*/
@@ -530,8 +533,8 @@ RIGHT(''00''+CAST(s.active_end_time/100 - (s.active_end_time/10000)*100'+@vc+',2
 RIGHT(''00''+CAST(s.active_end_time'+@vc+',2)
 ,s.originating_server_id,s.date_created,s.date_modified,s.version_number
 FROM msdb..sysjobs j'+@nl+'
-LEFT JOIN msdb..sysjobschedules js'+@nl+'on j.job_id=js.job_id
-LEFT JOIN msdb..sysschedules s'+@nl+'on js.schedule_id=s.schedule_id
+'+@lj+'msdb..sysjobschedules js'+@nl+'on j.job_id=js.job_id
+'+@lj+'msdb..sysschedules s'+@nl+'on js.schedule_id=s.schedule_id
 WHERE j.name='''+@Param COLLATE database_default+N''''+@or;
 PRINT @SQL;RAISERROR (@S,10,1) WITH NOWAIT;EXEC (@SQL);
 /*Return information about Job schedules*/
@@ -549,27 +552,29 @@ UNION ALL
 SELECT REPLACE(m,r.r1,r.r2),c.job_id,c.instance_id,r.ID
 FROM Rep r INNER JOIN Rec c ON r.ID=c.ID+1)
 SELECT h.step_id
-,[Step name]=CASE WHEN h.step_name=''(Job outcome)'' THEN ''Job: "''+j.name+''"'' ELSE h.step_name END
+,[Step name]=CASE WHEN h.sn=''(Job outcome)'' THEN ''Job: "''+j.name+''"'' ELSE h.sn END
 ,[Run]'+@R1+'
 ,[Output Message]=CAST(N''<message><m>''+REPLACE(REPLACE(msg.m,N''[SQLSTATE 01000]'',N''</m><m>''),N'' Command: '',N''</m><m>Command: '')+N''</m></message>'' AS XML)
 ,[Operator: Emailed/Netsended/Paged] =
 IsNull(o1.name,''None'')+''/'' +
 IsNull(o2.name,''None'')+''/'' +
 IsNull(o3.name,''None'')
-FROM msdb..sysjobs j'+@nl+@ij+'msdb..sysjobhistory h'+@nl+'ON j.job_id=h.job_id
+FROM msdb..sysjobs j'+@nl+'
+OUTER APPLY ('+@sjh+') as h
 INNER JOIN (SELECT m,job_id,instance_id FROM Rec WHERE ID=(SELECT MAX(id) FROM Rep)) msg
-ON msg.job_id=h.job_id AND msg.instance_id=h.instance_id
+ON msg.job_id=j.job_id AND msg.instance_id=h.iid
 OUTER APPLY (SELECT inst_id=MAX(i.instance_id) FROM msdb..sysjobhistory i'+@nl+'WHERE j.job_id=i.job_id) e
-LEFT JOIN msdb..sysjobsteps as s'+@nl+' ON j.job_id=s.job_id and h.step_id=s.step_id
+'+@lj+'msdb..sysjobsteps as s'+@nl+' ON j.job_id=s.job_id and h.step_id=s.step_id
 OUTER APPLY (
 SELECT inst_id=MIN(instance_id) FROM msdb..sysjobhistory'+@nl+'
-WHERE step_id=0 and j.job_id=job_id and (instance_id>h.instance_id or (h.step_id=0 and instance_id=h.instance_id))
+WHERE step_id=0 and j.job_id=job_id and (instance_id>h.iid or (h.step_id=0 and instance_id=h.iid))
 ) ah
-LEFT JOIN msdb..sysoperators o1'+@nl+'ON o1.id=h.operator_id_emailed
-LEFT JOIN msdb..sysoperators o2'+@nl+'ON o2.id=h.operator_id_netsent
-LEFT JOIN msdb..sysoperators o3'+@nl+'ON o3.id=h.operator_id_paged
+'+@lj+'msdb..sysoperators o1'+@nl+'ON o1.id=h.o1
+'+@lj+'msdb..sysoperators o2'+@nl+'ON o2.id=h.o2
+'+@lj+'msdb..sysoperators o3'+@nl+'ON o3.id=h.o3
 WHERE j.name='''+@Param COLLATE database_default+N'''
 ORDER BY ah.inst_id DESC,h.step_id'+@or;
+
 GOTO RET;
 END
 ELSE IF Upper(LEFT(@Param,1)) COLLATE database_default='H' and
@@ -602,8 +607,8 @@ CAST(CAST(a.last_occurrence_date'+@vc+' as DATETIME)),121) END
 ,[Has notification]=CASE a.has_notification'+@yn+'
 ,a.performance_condition
 FROM msdb..sysalerts a'+@nl+'
-LEFT JOIN master.sys.messages m'+@nl+'ON a.message_id=m.message_id and m.language_id=1033
-LEFT JOIN msdb..sysjobs j'+@nl+'ON j.job_id=a.job_id'+@or
+'+@lj+'master.sys.messages m'+@nl+'ON a.message_id=m.message_id and m.language_id=1033
+'+@lj+'msdb..sysjobs j'+@nl+'ON j.job_id=a.job_id'+@or
 GOTO RET;
 END
 ELSE IF EXISTS (SELECT TOP 1 1 FROM msdb..sysmail_servertype) and
@@ -642,9 +647,9 @@ WHEN 3 THEN ''Retrying'' ELSE ''Failed'' END'+@nv+'
 ,[Modification Date]=CAST(CONVERT(CHAR(23),m.last_mod_date,121)'+@nv+'
 ,[Last modification user]=CAST(m.last_mod_user'+@nv+'
 FROM msdb..sysmail_mailitems m
-LEFT JOIN msdb..[sysmail_profile] l ON m.profile_id=l.profile_id
-LEFT JOIN msdb..[sysmail_account] a ON a.account_id=m.sent_account_id
-LEFT JOIN msdb..sysmail_event_log e ON e.mailitem_id=m.mailitem_id and (e.event_type IS NULL OR e.event_type !=''information'')
+'+@lj+'msdb..[sysmail_profile] l ON m.profile_id=l.profile_id
+'+@lj+'msdb..[sysmail_account] a ON a.account_id=m.sent_account_id
+'+@lj+'msdb..sysmail_event_log e ON e.mailitem_id=m.mailitem_id and (e.event_type IS NULL OR e.event_type !=''information'')
 WHERE m.mailitem_id='+@Param+N') aa
 UNPIVOT (ColumnValues FOR ColumnNames IN
 (mailitem_id,[Send request date],[Mail body],[Sent status],[Error Description]
@@ -670,30 +675,30 @@ SET @SQL=N'DECLARE @View Tinyint;
 */
 SET @View='+CAST(@H AS VARCHAR)+';
 WITH Job_Hist as (
-SELECT j.name,run_time,run_duration,h.run_date,j.job_id,h.run_status
+SELECT j.name,run_time,rd=run_duration,h.run_date,j.job_id,h.run_status
 ,TS=DATEADD(SECOND,(run_time/10000)*3600+((run_time % 10000)/100)*60+run_time % 100,CAST(CAST(run_date'+@vc+' as DATETIME))
 ,DATEDIFF(Day,CONVERT(Date,CONVERT(CHAR(10),run_date,121)),GetDate()) as Run_Day
 ,SH=run_time/10000,SM=(run_time % 10000) / 100,SS=run_time % 100
-,DH=run_duration/3600,DM=(run_duration % 3600)/60,DS=run_duration % 60
+,DH=run_duration/3600,DM=(run_duration%3600)/60,DS=run_duration%60
 FROM msdb..sysjobs as j'+@nl+@ij+'msdb..sysjobhistory as h'+@nl+'ON j.job_id=h.job_id
 WHERE h.step_id=0
 ),DataPoints as (
-SELECT job_id,run_time,run_duration,run_date,run_status
+SELECT job_id,run_time,rd,run_date,run_status
 ,x_dur=DH+(DM*60+DS)/3600.
 ,y=(DENSE_RANK() OVER (ORDER BY name DESC) - 1)
 ,x=SH+(SM*60+SS)/3600.+CASE WHEN @View=2 and Run_Day=0 THEN 24 ELSE 0 END
 ,RIGHT(''0''+CAST(SH'+@vc+',2)+'':''+RIGHT(''0''+CAST(SM'+@vc+',2)+'':''+RIGHT(''0''+CAST(SS'+@vc+',2) as Start_Time
-,RIGHT(''0''+CAST(DH'+@vc+',2)+'':''+RIGHT(''0''+CAST(DM'+@vc+',2)+'':''+RIGHT(''0''+CAST(DS'+@vc+',2) as Duration
+,Duration=RIGHT(''00''+CAST(rd/10000'+@vc+',2)+'':''+RIGHT(''00''+CAST(rd/100 -(rd/10000)*100'+@vc+',2)+'':''+RIGHT(''00''+CAST(rd'+@vc+',2)
 FROM Job_Hist
-WHERE run_duration>0 and Run_Day=@View
+WHERE rd>0 and Run_Day=@View
 ),History_Aggregate as (
 SELECT job_id,name
 ,[Earliest recorded date]=CONVERT(CHAR(19),MIN(TS),121)
 ,[Recorded runs]=COUNT(*)
-,[Total Duration]=CAST(SUM(run_duration) / 3600'+@vc+'+'':''
-+RIGHT(''0''+CAST( (SUM(run_duration) % 3600) / 60'+@vc+',2)+'':''
-+RIGHT(''0''+CAST( SUM(run_duration) % 60'+@vc+',2)
-,[Total Duration,Sec]=SUM(run_duration)
+,[Total Duration]=CAST(SUM(rd) / 3600'+@vc+'+'':''
++RIGHT(''0''+CAST( (SUM(rd) % 3600) / 60'+@vc+',2)+'':''
++RIGHT(''0''+CAST( SUM(rd) % 60'+@vc+',2)
+,[Total Duration,Sec]=SUM(rd)
 FROM Job_Hist h
 GROUP BY job_id,name
 )
@@ -707,7 +712,7 @@ WHEN 2 THEN ''Retry''
 WHEN 3 THEN ''Canceled''
 ELSE ''N/A'' END
 ,d.Duration
-,[Duration,Sec]=d.run_duration
+,[Duration,Sec]=d.rd/10000*3600+d.rd%10000/100*60+d.rd%100
 ,[Earliest recorded date]
 ,[Recorded runs]
 ,[Total Duration]

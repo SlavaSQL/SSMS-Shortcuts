@@ -1,3 +1,4 @@
+2022-02-04	Ctrl-7	Fixed Job Duration numbers. Rearranged compression.
 2020-03-04	Ctrl-7	Fixed Duplicates due to multiple use of resources by adding "DISTINCT".
 2020-03-02	Ctrl-9  Fixed Changed Row counts to Bigint.
 2020-02-20	Ctrl-5	Added "Node" column for AGs. Added 'N/A' state for some "Yes"/"No" columns.
