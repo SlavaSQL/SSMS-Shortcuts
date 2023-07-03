@@ -1,4 +1,4 @@
-/* 0 - 2019-07-12 Object Information
+/* 0 - 2023-07-03 Object Information
 Consolidated by Slava Murygin
 http://slavasql.blogspot.com/2016/02/ssms-query-shortcuts.html
 Mostly used materials from Paul S. Randal, SQLskills.com
@@ -56,7 +56,7 @@ BEGIN
 	EXEC (@SQL);
 
 	SET @SQL = 'SELECT [Object_Name] = ''['' + SCHEMA_NAME(SCHEMA_ID) + ''].['' + [name] + '']''
-		, [Exec on SQL Startup] = CASE 
+		, [Exec on SQL Startup] = CASE
 			WHEN [type] = ''P'' and OBJECTPROPERTY([object_id], ''ExecIsStartUp'') = 0 THEN ''No''
 			WHEN [type] = ''P'' and OBJECTPROPERTY([object_id], ''ExecIsStartUp'') = 1 THEN ''Yes''
 			ELSE ''N/A'' END
@@ -244,6 +244,23 @@ BEGIN /* @Object_Name Is NOT Null */
 		PRINT @SQL;
 		PRINT @S;
 		EXEC (@SQL);
+
+		SET @SQL = N'
+		/* Tables'' & columns'' Extended Properties */
+			SELECT [Object Type] = CASE ep.minor_id WHEN 0 THEN o.type_desc ELSE ''COLUMN'' END
+			, [Object Name] = IsNull(c.name,o.name)
+			, [Extended Property Name] = ep.name
+			, [Extended Property Value] = ep.value
+			FROM sys.extended_properties as ep
+			INNER JOIN sys.objects as o ON ep.major_id = o.object_id
+			LEFT JOIN sys.columns as c ON c.column_id = ep.minor_id
+				and o.object_id = c.object_id
+			WHERE ep.class = 1 and ep.major_id = ' + CAST(@Object_Id as NVARCHAR) + '
+			ORDER BY ep.minor_id
+			OPTION (RECOMPILE);';
+		PRINT @SQL;
+		PRINT @S;
+		EXEC (@SQL);
 		
 	END
 
@@ -287,7 +304,7 @@ BEGIN /* @Object_Name Is NOT Null */
 					SCHEMA_NAME(schema_id) as [Schema_Name],
 					name as Foreign_Key_Name,
 					OBJECT_NAME(referenced_object_id) as Referenced_Table,
-					Is_disabled, is_not_trusted, 
+					Is_disabled, is_not_trusted,
 					create_date, modify_date,
 					object_id, parent_object_id, referenced_object_id
 			FROM sys.foreign_keys with (NOLOCK)
