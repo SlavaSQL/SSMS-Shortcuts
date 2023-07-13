@@ -1,4 +1,4 @@
-/* 0 - 2023-07-03 Object Information
+/* 0 - 2023-07-13 Object Information
 Consolidated by Slava Murygin
 http://slavasql.blogspot.com/2016/02/ssms-query-shortcuts.html
 Mostly used materials from Paul S. Randal, SQLskills.com
@@ -245,8 +245,10 @@ BEGIN /* @Object_Name Is NOT Null */
 		PRINT @S;
 		EXEC (@SQL);
 
-		SET @SQL = N'
-		/* Tables'' & columns'' Extended Properties */
+		IF EXISTS (SELECT 1 FROM sys.extended_properties WHERE major_id=@Object_Id)
+		BEGIN
+			SET @SQL = N'
+/* Tables'' & columns'' Extended Properties */
 			SELECT [Object Type] = CASE ep.minor_id WHEN 0 THEN o.type_desc ELSE ''COLUMN'' END
 			, [Object Name] = IsNull(c.name,o.name)
 			, [Extended Property Name] = ep.name
@@ -258,10 +260,68 @@ BEGIN /* @Object_Name Is NOT Null */
 			WHERE ep.class = 1 and ep.major_id = ' + CAST(@Object_Id as NVARCHAR) + '
 			ORDER BY ep.minor_id
 			OPTION (RECOMPILE);';
-		PRINT @SQL;
-		PRINT @S;
-		EXEC (@SQL);
+			PRINT @SQL;
+			PRINT @S;
+			EXEC (@SQL);
+		END
 		
+		IF EXISTS (SELECT 1 FROM sys.indexes WHERE is_hypothetical=0 AND index_id=1 AND type=5 and [object_id]=@Object_Id)
+		BEGIN
+			SET @SQL = N'
+/* Clustered Columnstore Index Info */
+			DECLARE @oid INT = ' + CAST(@Object_Id as NVARCHAR) + ';
+			DECLARE @groups TABLE (row_group_id INT,grows bigint,size_in_bytes bigint,[Description] nvarchar(60),state tinyint,partition_id bigint)
+			DECLARE @segments TABLE (segment_id INT,encoding_type INT,on_disk_size bigint,column_id int,partition_id bigint)
+
+			INSERT INTO @groups
+			SELECT g.row_group_id
+				, g.total_rows - IsNull(g.deleted_rows,0)
+				, size_in_bytes
+				, g.state_description
+				, CASE WHEN g.state = 1 THEN 1 WHEN g.deleted_rows = 0 THEN 2 WHEN g.total_rows - g.deleted_rows > 0 THEN 3 ELSE 4 END
+				, p.partition_id
+			FROM sys.partitions as p, sys.column_store_row_groups as g
+			WHERE p.object_id = @oid and p.index_id = 1 and g.object_id = @oid and g.index_id = 1 and p.partition_number = g.partition_number
+			OPTION (RECOMPILE);
+
+			SELECT ''COLUMNSTORE SEGMENT GROUP''
+				, [Group(s) Status] = CASE state WHEN 1 THEN ''DELTA'' WHEN 2 THEN ''CURRENT'' WHEN 3 THEN ''CURRENT OLD'' ELSE ''DELETED'' END
+				, [Description]
+				, [# of Groups] = COUNT(*)
+				, [Avg Group Rows] = AVG(grows)
+				, [Total Stored Rows] = SUM(grows)
+				, [Avg Segment Size, Mb] = CAST(AVG(size_in_bytes/1048576.) as DECIMAL(19,3))
+				, [Total Disk Size, Mb] = CAST(SUM(size_in_bytes)/1048576. as DECIMAL(19,3))
+			FROM @groups
+			GROUP BY state, [Description]
+			ORDER BY state
+			OPTION (RECOMPILE);
+
+			INSERT INTO @segments
+			SELECT css.segment_id,css.encoding_type,css.on_disk_size,css.column_id,p.partition_id
+			FROM sys.partitions as p
+			INNER JOIN sys.column_store_segments as css ON css.hobt_id = p.hobt_id and p.partition_id = css.partition_id
+			WHERE p.object_id = @oid and p.index_id = 1
+			OPTION (RECOMPILE);
+
+			SELECT [Columnstore Column Name] = c.name,g.[Description]
+				, [Columnstore Encoding] = CASE encoding_type WHEN 1 THEN ''VALUE_BASED'' WHEN 2 THEN ''VALUE_HASH_BASED'' WHEN 3 THEN ''STRING_HASH_BASED''
+					WHEN 4 THEN ''STORE_BY_VALUE_BASED'' WHEN 5 THEN ''STRING_STORE_BY_VALUE_BASED'' END
+				,[# of Segments] = COUNT(c.column_id)
+				,[Avg Segment Size, Mb] = CAST(CAST(AVG(on_disk_size/1048576.) as DECIMAL(19,3)) as VARCHAR)
+				,[Total Disk Size, Mb] = CAST(CAST(SUM(on_disk_size/1048576.) as DECIMAL(19,3)) as VARCHAR)
+			FROM sys.columns as c
+			INNER JOIN @groups as g ON 1 = 1
+			INNER JOIN @segments as s ON c.column_id = s.column_id and s.partition_id = g.partition_id and g.row_group_id = s.segment_id
+			WHERE c.object_id = @oid and g.state != 4
+			GROUP BY c.name,g.[Description],s.encoding_type
+			OPTION (RECOMPILE);';
+			PRINT @SQL;
+			PRINT @S;
+			EXEC (@SQL);
+		END
+
+
 	END
 
 	IF /*OBJECTPROPERTY(OBJECT_ID(@Object_Name), 'IsPrimaryKey') = 1*/ @Object_Type COLLATE database_default = 'PK'
