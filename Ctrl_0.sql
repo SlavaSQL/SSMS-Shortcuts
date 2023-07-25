@@ -1,4 +1,4 @@
-/* 0 - 2023-07-13 Object Information
+/* 0 - 2023-07-25 Object Information
 Consolidated by Slava Murygin
 http://slavasql.blogspot.com/2016/02/ssms-query-shortcuts.html
 Mostly used materials from Paul S. Randal, SQLskills.com
@@ -154,6 +154,39 @@ BEGIN /* @Object_Name Is NOT Null */
 	BEGIN
 		SELECT @Object_Name = N'[' + SCHEMA_NAME(SCHEMA_ID) + N'].[' + name + N']'
 		FROM sys.objects WHERE object_id = @Object_Id;
+
+		IF @Object_Type COLLATE database_default IN ('U')
+			and EXISTS (SELECT 1 FROM sys.tables WHERE temporal_type!=0 and [object_id]=@Object_Id)
+		BEGIN
+			IF EXISTS (SELECT 1 FROM sys.tables WHERE temporal_type=2 and history_table_id is not null and [object_id]=@Object_Id)
+			SET @SQL = '
+/* Temporal Table Note/Info */
+				SELECT [Attention]=''This is a "'' + t.temporal_type_desc + ''"'', [Associated HISTORY_TABLE name] = h.name
+					, [Auto-Generated Columns] = CASE LEN(GColumns) WHEN 0 THEN Null ELSE LEFT(GColumns,LEN(GColumns)-1) END
+				FROM sys.tables as h
+				INNER JOIN sys.tables as t ON t.history_table_id = h.[object_id]
+				OUTER APPLY (SELECT (SELECT c.name + '','' FROM sys.columns as c
+				WHERE c.generated_always_type != 0 and c.[object_id]=t.[object_id]
+				FOR XML PATH(''''))) as c(GColumns)
+				WHERE t.[object_id]=' + CAST(@Object_Id as VARCHAR) + '
+				OPTION (RECOMPILE);';
+			ELSE
+			SET @SQL = '
+/* Historical Table Note/Info */
+				SELECT [Attention]=''This is a "'' + h.temporal_type_desc + ''"'', [Associated SYSTEM_VERSIONED_TEMPORAL_TABLE name] = t.name
+					, [Auto-Generated Columns] = CASE LEN(GColumns) WHEN 0 THEN Null ELSE LEFT(GColumns,LEN(GColumns)-1) END
+				FROM sys.tables as h
+				INNER JOIN sys.tables as t ON t.history_table_id = h.[object_id]
+				OUTER APPLY (SELECT (SELECT c.name + '','' FROM sys.columns as c
+				WHERE c.generated_always_type != 0 and c.[object_id]=t.[object_id]
+				FOR XML PATH(''''))) as c(GColumns)
+				WHERE h.[object_id]=' + CAST(@Object_Id as VARCHAR) + '
+				OPTION (RECOMPILE);';
+
+			PRINT @SQL;
+			PRINT @S;
+			EXEC (@SQL);
+		END
 
 		SET @SQL = 'EXEC sp_spaceused ''' + @Object_Name + ''';';
 		PRINT @SQL;
